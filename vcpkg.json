@@ -1,0 +1,15 @@
+{
+  "name": "ai-mock-interview",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "spdlog",
+    "gtest"
+  ],
+  "overrides": [
+    {
+      "name": "spdlog",
+      "version": "1.16.0"
+    }
+  ],
+  "builtin-baseline": "c01dc6ea7353758f2ed70df0bc29c97dfc650b3a"
+}
