@@ -1,1 +1,39 @@
+# ===== macOS =====
 .DS_Store
+
+# ===== Build directories =====
+build/
+cmake-build-*/
+out/
+
+# ===== CMake generated files =====
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# ===== vcpkg =====
+vcpkg_installed/
+build/vcpkg_installed/
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+
+# ===== Logs =====
+*.log
+
+# ===== Binary / Library files =====
+*.out
+*.exe
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+
+# ===== Debug symbols / misc cache =====
+*.dSYM/
+.cache/
