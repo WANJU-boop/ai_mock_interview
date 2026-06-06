@@ -14,6 +14,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # 依赖
 find_package(spdlog CONFIG REQUIRED)
+find_package(openssl CONFIG REQUIRED)
+find_package(boost CONFIG REQUIRED)
+
 
 # =========================
 # COMMON 模块转成库

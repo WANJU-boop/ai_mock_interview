@@ -3,7 +3,11 @@
   "version-string": "0.1.0",
   "dependencies": [
     "spdlog",
-    "gtest"
+    "gtest",
+    "openssl",
+    "boost-system",
+    "boost-asio",
+    "boost-beast"
   ],
   "overrides": [
     {
