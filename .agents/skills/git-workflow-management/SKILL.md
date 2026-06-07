@@ -1,6 +1,6 @@
 ---
 name: git-workflow-management
-description: C++ AI Mock Interview Git 工作流管理；当用户要求查看 diff、生成 commit message、暂存或提交变更时使用，禁止自动 push，commit 前必须展示 diff 总结和测试状态。
+description: C++ AI Mock Interview Git 工作流管理；当用户要求查看 diff、生成中文 commit message、暂存或提交变更时使用，禁止自动 push，commit 前必须展示 diff 总结和测试状态。
 ---
 
 # Git Workflow Management
@@ -48,15 +48,15 @@ description: C++ AI Mock Interview Git 工作流管理；当用户要求查看 d
 
 提交信息建议应：
 
-- 使用简洁、明确的英文。
-- 优先使用 Conventional Commits 风格，例如 `docs:`、`chore:`、`test:`、`fix:`、`feat:`。
+- 使用简洁、明确的中文描述。
+- 可以保留 Conventional Commits 风格的英文类型前缀，例如 `docs:`、`chore:`、`test:`、`fix:`、`feat:`，但冒号后的描述必须使用中文。
 - 只描述本次实际提交内容。
 - 不夸大范围，不写未实现的功能。
 
 示例：
 
 ```text
-docs: add Codex workflow skills and agent configuration
+docs: 添加 Codex 工作流技能和代理配置
 ```
 
 ## 提交流程
@@ -80,4 +80,3 @@ docs: add Codex workflow skills and agent configuration
 - 不要自动创建拉取请求（pull request）。
 - 不要执行破坏性命令，例如 `git reset --hard` 或 `git checkout --`，除非用户明确要求并确认风险。
 - 不要把未确认的文件加入提交。
-
