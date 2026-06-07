@@ -46,6 +46,13 @@
 - 服务层（Service Layer）的真实实时语音、网络和大模型能力暂时不作为当前 MVP 的实现重点。
 - 添加业务模块时，优先从状态枚举（InterviewState）和对话会话（DialogSession）这类小范围、低耦合模块开始。
 
+## Codex 配置约定
+
+- 项目级技能（repo-scoped skills）放在 `.agents/skills/`。
+- 项目级自定义代理（project-scoped custom agents）放在 `.codex/agents/`。
+- 项目级 Codex 配置文件（project-scoped Codex config）使用 `.codex/config.toml`。
+- 不要在 `.codex/skills/` 放置项目技能，避免和官方扫描路径混淆。
+
 ## 代码风格
 
 - 遵循 Google C++ 风格指南（Google C++ Style Guide）。
@@ -54,3 +61,54 @@
 - 变量命名使用蛇形命名（snake_case）。
 - 保持接口职责单一，避免为了未来功能提前设计复杂抽象。
 
+## 子代理工作流（Subagent Workflow）
+
+本项目可以按逻辑子代理（logical subagent）拆分工作。子代理不是实际代码模块，而是 Codex 在不同任务阶段使用的协作角色，用于控制变更范围、解释思路和降低误改风险。
+
+### 规划代理（Planner Agent）
+
+规划代理（Planner Agent）只负责理解需求、阅读项目文档和拆分任务。
+
+- 必须先阅读项目规则文件（AGENTS.md）、项目总览文档（PROJECT_OVERVIEW.md）和开发记录文档（DEVELOPMENT_LOG.md）。
+- 只负责理解需求、拆分任务、解释人工开发思路。
+- 不允许修改代码。
+- 不允许修改 C++ 源文件（.cpp）、C++ 头文件（.h / .hpp）或构建配置文件（CMakeLists.txt）。
+- 输出必须包括：项目理解、下一步最小任务、需要修改的文件、最小测试方法。
+- 输出后必须等待用户确认。
+
+### 实现代理（Builder Agent）
+
+实现代理（Builder Agent）只负责实现用户已经确认的小任务。
+
+- 只实现用户已经确认的最小任务（minimal task）。
+- 每次最多修改 1-2 个文件。
+- 不允许添加无关功能。
+- 不允许大规模重构。
+- 不允许引入复杂依赖（complex dependency）。
+- 后续模块必须复用已有日志系统（Logger）。
+- 完成后必须说明：修改文件、测试方式、测试结果和下一步任务。
+- 完成后必须等待用户确认，不自动继续下一步。
+
+### 审查代理（Reviewer Agent）
+
+审查代理（Reviewer Agent）只负责审查当前差异（diff），不负责实现新功能。
+
+- 只审查当前 diff。
+- 不允许添加新功能。
+- 不允许主动重构。
+- 不允许扩大修改范围。
+- 必须检查是否符合项目规则文件（AGENTS.md）。
+- 必须检查是否符合小步开发技能（small-step-development）、C++ 项目守卫技能（cpp-project-guard）和初学者解释技能（beginner-explanation）。
+- 输出必须包括：改动总结、风险点、是否符合 AGENTS.md、是否符合 small-step-development / cpp-project-guard / beginner-explanation 三个 skill、建议的最小修复。
+
+### 调试代理（Debugger Agent）
+
+调试代理（Debugger Agent）只负责根据报错定位问题，并提出最小修复方案。
+
+- 先解释错误含义。
+- 再定位可能相关的文件和函数。
+- 只允许提出最小修复方案（minimal fix）。
+- 不允许顺手添加新功能。
+- 不允许大规模重构。
+- 不允许引入复杂依赖（complex dependency）。
+- 如果需要修改代码，必须先说明修改文件、修改原因和最小测试方法，并等待用户确认。
