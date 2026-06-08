@@ -165,20 +165,21 @@ Connecting
 - 清理资源。
 - 状态进入已完成（Completed / kCompleted）。
 
-## 当前推荐下一步
+## 实现顺序建议
 
-推荐下一步是添加状态枚举（InterviewState）。
+建议先完成状态枚举（InterviewState）相关基础能力，再逐步实现对话会话（DialogSession）和面试流程管理器（InterviewManager）。
 
 原因：
 
-- 对话会话（DialogSession）后续需要用它保存当前状态。
-- 面试流程管理器（InterviewManager）后续需要根据状态推进流程。
-- 状态枚举（InterviewState）是范围最小、依赖最少、最容易测试的第一步。
+- 对话会话（DialogSession）需要保存当前状态。
+- 面试流程管理器（InterviewManager）需要根据状态推进流程。
+- 状态枚举（InterviewState）范围小、依赖少、适合作为早期基础模块。
 - 先定义状态，可以避免后续在 DialogSession 中使用散落的字符串或布尔变量表达流程阶段。
+
+具体的当前下一步任务以开发记录文档（DEVELOPMENT_LOG.md）为准，本文档只保留长期架构和实现顺序建议。
 
 ## 需要用户确认
 
 - 时序图中的面试会话（InterviewSession）是否等同于架构图中的面试流程管理器（InterviewManager）。
 - 追问分支中的分数阈值是否固定采用 70-89 分需要追问、90 分以上不需要追问。
 - 服务层中的服务器语音服务（ASR/TTS Server）后续是否作为独立模块，还是归入实时客户端（RealtimeClient）或音频管理器（AudioManager）。
-

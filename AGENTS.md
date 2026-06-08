@@ -38,6 +38,14 @@
 - 不要创建 `note` 目录。
 - 不要引用图片路径。
 
+## 任务收尾规则
+
+- 每次完成开发任务后，必须检查是否需要更新开发记录文档（DEVELOPMENT_LOG.md）。
+- 如果任务改变了当前进度、已完成事项或下一步最小任务，必须同步更新 DEVELOPMENT_LOG.md。
+- 如果任务只修改工具配置、纯说明文字或临时实验，可以不更新 DEVELOPMENT_LOG.md，但必须在最终回复中说明原因。
+- 项目总览文档（PROJECT_OVERVIEW.md）只记录长期架构和设计，不记录容易过期的“当前下一步”。
+- 当前下一步任务只以 DEVELOPMENT_LOG.md 为准，避免多个 Markdown 文件之间出现冲突。
+
 ## 项目架构约定
 
 - 长期目标是 AI 面试系统（AI Interview System）。
@@ -70,6 +78,7 @@
 规划代理（Planner Agent）只负责理解需求、阅读项目文档和拆分任务。
 
 - 必须先阅读项目规则文件（AGENTS.md）、项目总览文档（PROJECT_OVERVIEW.md）和开发记录文档（DEVELOPMENT_LOG.md）。
+- 判断当前下一步任务时，以开发记录文档（DEVELOPMENT_LOG.md）为准。
 - 只负责理解需求、拆分任务、解释人工开发思路。
 - 不允许修改代码。
 - 不允许修改 C++ 源文件（.cpp）、C++ 头文件（.h / .hpp）或构建配置文件（CMakeLists.txt）。
@@ -87,6 +96,7 @@
 - 不允许引入复杂依赖（complex dependency）。
 - 后续模块必须复用已有日志系统（Logger）。
 - 完成后必须说明：修改文件、测试方式、测试结果和下一步任务。
+- 完成开发任务后必须更新或明确跳过开发记录文档（DEVELOPMENT_LOG.md）。
 - 完成后必须等待用户确认，不自动继续下一步。
 
 ### 审查代理（Reviewer Agent）
