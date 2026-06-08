@@ -84,6 +84,17 @@
 - 是否能编译：未验证，因为本次未修改 C++ 源文件或构建配置。
 - 下一步最小任务：添加状态枚举（InterviewState）。
 
+## 2026-06-08
+
+### 添加状态枚举（InterviewState）
+
+- 修改文件：`include/session/interview_state.h`、`DEVELOPMENT_LOG.md`。
+- 实现内容：新增状态枚举（InterviewState），定义文字版面试流程需要的连接中、面试官说话中、空闲等待中、候选人回答中、面试官思考中、结束处理中、已完成和错误状态。
+- 测试方式：先运行 `cmake --build build` 做最小构建验证；因为新 worktree 没有 `build` 目录，先运行 `cmake -S . -B build` 完成配置后再次运行 `cmake --build build`；额外使用只包含 `session/interview_state.h` 的临时编译命令做语法检查。
+- 测试结果：`session/interview_state.h` 语法检查通过；`cmake --build build` 在已有日志系统（Logger）编译阶段失败，失败点是 `spdlog` / macOS SDK 相关头文件兼容问题，不是状态枚举（InterviewState）。
+- 是否能编译：项目整体暂未通过，因为现有构建环境在编译 `src/common/logger.cpp` 时失败。
+- 下一步最小任务：添加对话会话（DialogSession）状态管理。
+
 ## 需要用户确认
 
 - 时序图中的面试会话（InterviewSession）是否等同于架构图中的面试流程管理器（InterviewManager）。
