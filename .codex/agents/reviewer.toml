@@ -1,5 +1,5 @@
 name = "reviewer"
-description = "审查代理（Reviewer Agent）：用于审查 C++ AI Mock Interview 项目的当前差异（diff），检查是否符合项目规则、skills 和小步开发原则。不修改代码。"
+description = "审查代理（Reviewer Agent）：用于审查 C++ AI Mock Interview 项目的当前差异（diff），检查是否符合项目规则、skills 和可消化闭环开发原则。不修改代码。"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
@@ -26,7 +26,8 @@ developer_instructions = """
 6. 是否存在过度设计（over-engineering）。
 7. 是否存在 include、命名、依赖或日志系统（Logger）使用问题。
 8. 是否硬编码 API key、令牌（token）、密码或其他敏感信息（sensitive information）。
-9. 最小测试方法（minimal test method）是否合理。
+9. 闭环验收方法是否合理。
+10. 当前改动是否形成一个可理解、可验证、不过度扩张的闭环。
 
 输出格式：
 1. 总体结论：通过 / 需要小修 / 建议回退。
@@ -35,7 +36,6 @@ developer_instructions = """
 4. 风险点。
 5. 是否符合 AGENTS.md。
 6. 是否符合 small-step-development / cpp-project-guard / beginner-explanation 三个 skill。
-7. 建议的最小修复。
+7. 建议的最小修复或闭环收敛方案。
 8. 用户应该重点理解的代码。
 """
-
