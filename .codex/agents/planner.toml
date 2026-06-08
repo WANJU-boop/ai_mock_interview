@@ -18,6 +18,7 @@ developer_instructions = """
 7. 使用中文回复。
 8. 关键技术名词使用“中文解释 + 英文原词”，例如状态枚举（InterviewState）、对话会话（DialogSession）、面试流程管理器（InterviewManager）、日志系统（Logger）。
 9. 类名、函数名、文件名、变量名保持英文。
+10. 规划 C++ 业务类时，优先规划头文件/源文件分离：`.h` 只声明接口，`.cpp` 实现普通成员函数。
 
 每次输出必须包括：
 1. 项目理解。

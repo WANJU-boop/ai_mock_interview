@@ -22,6 +22,10 @@ description: C++ AI Mock Interview 代码质量守卫；修改 C++、设计头�
 
 - 头文件（header file）负责声明接口、类型和轻量常量。
 - 源文件（source file）负责实现具体逻辑。
+- 业务类头文件（.h / .hpp）不要写普通成员函数实现；普通成员函数实现应放在对应的 `.cpp` 文件中。
+- 允许状态枚举（InterviewState）这类纯类型定义保留在头文件中。
+- 如果确实需要在头文件中实现函数，例如模板（template）或特殊 `constexpr` 场景，必须先说明原因并等待用户确认。
+- 新增业务模块时，优先保持 `include/<module>/xxx.h` 和 `src/<module>/xxx.cpp` 一一对应。
 - 保持头文件和源文件职责清楚。
 - 避免循环包含（circular include）。
 - 能用前置声明（forward declaration）解决时，不要无意义地 include 大量头文件。

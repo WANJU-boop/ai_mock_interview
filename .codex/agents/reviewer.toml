@@ -24,10 +24,11 @@ developer_instructions = """
 4. 是否符合小步开发技能（small-step-development）、C++ 项目守卫技能（cpp-project-guard）和初学者解释技能（beginner-explanation）。
 5. C++ 代码是否适合初学者阅读。
 6. 是否存在过度设计（over-engineering）。
-7. 是否存在 include、命名、依赖或日志系统（Logger）使用问题。
-8. 是否硬编码 API key、令牌（token）、密码或其他敏感信息（sensitive information）。
-9. 闭环验收方法是否合理。
-10. 当前改动是否形成一个可理解、可验证、不过度扩张的闭环。
+7. 是否存在 include、命名、依赖、头文件/源文件职责或日志系统（Logger）使用问题。
+8. 业务类头文件是否只声明接口，普通成员函数实现是否放在对应 `.cpp`。
+9. 是否硬编码 API key、令牌（token）、密码或其他敏感信息（sensitive information）。
+10. 闭环验收方法是否合理。
+11. 当前改动是否形成一个可理解、可验证、不过度扩张的闭环。
 
 输出格式：
 1. 总体结论：通过 / 需要小修 / 建议回退。
