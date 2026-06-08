@@ -49,6 +49,16 @@ target_link_libraries(services_lib
 )
 
 # =========================
+# SESSION 模块转成库
+# =========================
+add_library(session_lib  src/session/dialog_session.cpp)
+
+target_include_directories(session_lib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# =========================
 # 主程序
 # =========================
 add_executable(${PROJECT_NAME}
@@ -59,6 +69,7 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         common_lib
         services_lib
+        session_lib
 )
 
 # =========================
