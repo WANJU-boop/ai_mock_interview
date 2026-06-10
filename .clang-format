@@ -1,7 +1,9 @@
 BasedOnStyle: Google
 IndentWidth: 4
+AccessModifierOffset: -4
 ColumnLimit: 120
 UseTab: Never
+CompactNamespaces: false
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortBlocksOnASingleLine: Never
 AllowShortFunctionsOnASingleLine: None

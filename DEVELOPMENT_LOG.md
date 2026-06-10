@@ -21,7 +21,7 @@
 - 项目类型：C++ AI 模拟面试项目（AI Mock Interview）。
 - 长期目标：AI 面试系统（AI Interview System）。
 - 当前目标：C++ 文字版最小可行产品（text-based C++ mock MVP）。
-- 当前优先方向：状态枚举（InterviewState）和对话会话（DialogSession）状态管理已完成，下一步推进对话历史和面试流程管理器（InterviewManager）。
+- 当前优先方向：文字版终端演示（CLI demo）已能串起状态、题目和回答，下一步推进模拟评分（mock scoring）。
 - 当前服务层策略：实时客户端（RealtimeClient）、音频管理器（AudioManager）、大模型客户端（LLMClient）、简历解析器（PDFParser）暂时只保留在设计文档中，MVP 阶段不实现真实服务。
 
 ## 已完成或已讨论内容
@@ -37,14 +37,14 @@
 
 ## 当前下一步任务
 
-添加对话会话（DialogSession）对话历史。
+添加模拟评分（mock scoring）。
 
 建议闭环范围：
 
-- 在对话会话（DialogSession）中保存候选人回答或对话记录。
-- 只做内存中的简单历史记录，不接入大模型客户端（LLMClient）。
-- 添加可验证的读取、追加和数量统计能力。
-- 补充对应单元测试（GoogleTest）。
+- 为每道回答引入一个简单评分结果，例如分数和简短评价。
+- 先使用规则驱动的模拟评分（mock scoring），不接入大模型客户端（LLMClient）。
+- 让终端演示（CLI demo）在回答后或总结阶段打印评分结果。
+- 补充对应单元测试（GoogleTest），验证评分规则和输出数据结构。
 
 ## 后续计划顺序
 
@@ -106,6 +106,39 @@
 - 测试结果：头文件/源文件分离后构建通过，`session_lib` 正常编译并链接到测试；单元测试全部通过，共 5 个测试，其中包含 3 个对话会话（DialogSession）状态管理测试。
 - 是否能编译：能编译。普通沙箱运行 `cmake --build build` 会因无法访问 vcpkg 锁文件失败，提升权限后构建通过。
 - 下一步可消化闭环任务：添加对话会话（DialogSession）对话历史。
+
+## 2026-06-08
+
+### 添加对话会话（DialogSession）对话历史
+
+- 修改文件：`include/session/dialog_session.h`、`src/session/dialog_session.cpp`、`test/session/test_dialog_session.cpp`、`DEVELOPMENT_LOG.md`。
+- 实现内容：为对话会话（DialogSession）增加候选人回答历史，支持内存中的追加、读取和数量统计；保持头文件/源文件分离，不引入大模型客户端（LLMClient）或额外依赖。
+- 测试方式：运行 `cmake --build build` 编译项目，再运行 `ctest --test-dir build --output-on-failure` 执行单元测试。
+- 测试结果：全部通过，共 8 个测试；新增 3 个对话会话（DialogSession）对话历史测试全部通过。
+- 是否能编译：能编译。`cmake --build build` 在当前环境通过，链接阶段仅有现有 dwarf warning，不影响本次闭环功能验证。
+- 下一步可消化闭环任务：添加面试流程管理器（InterviewManager）固定问题列表。
+
+## 2026-06-09
+
+### 添加面试流程管理器（InterviewManager）固定问题列表
+
+- 修改文件：`include/session/interview_manager.h`、`src/session/interview_manager.cpp`、`test/session/test_interview_manager.cpp`、`CMakeLists.txt`、`test/CMakeLists.txt`、`DEVELOPMENT_LOG.md`。
+- 实现内容：新增面试流程管理器（InterviewManager），用固定问题列表驱动文字版面试流程；支持判断是否有当前题目、读取当前题目、顺序推进到下一题，并在关键流程节点复用日志系统（Logger）记录状态。
+- 测试方式：运行 `cmake --build build` 编译项目，再运行 `ctest --test-dir build --output-on-failure` 执行单元测试。
+- 测试结果：全部通过，共 12 个测试；新增 4 个面试流程管理器（InterviewManager）固定问题列表测试全部通过。
+- 是否能编译：能编译。普通沙箱运行 `cmake --build build` 会因 vcpkg 全局锁文件权限失败，提升权限后构建通过；链接阶段仍有现有 dwarf warning，但不影响本次闭环功能验证。
+- 下一步可消化闭环任务：添加用户回答保存与面试流程衔接。
+
+## 2026-06-09
+
+### 添加最小终端面试演示（CLI demo）
+
+- 修改文件：`include/session/interview_manager.h`、`src/session/interview_manager.cpp`、`src/main.cpp`、`test/session/test_interview_manager.cpp`、`DEVELOPMENT_LOG.md`。
+- 实现内容：让面试流程管理器（InterviewManager）接收候选人回答并转存到对话会话（DialogSession）；将状态枚举（InterviewState）、固定问题列表和回答历史串到主程序里，形成一个简单的终端面试演示，结束后打印回答总结。
+- 测试方式：运行 `cmake --build build` 编译项目，再运行 `ctest --test-dir build --output-on-failure` 执行单元测试；额外使用标准输入重定向运行主程序做终端演示验证。
+- 测试结果：全部通过，共 14 个测试；新增 2 个面试流程管理器（InterviewManager）与对话会话（DialogSession）协作测试全部通过；终端演示验证成功，能顺序出题、保存回答并打印总结。
+- 是否能编译：能编译。`cmake --build build` 在当前环境通过，链接阶段仍有现有 dwarf warning，但不影响本次闭环功能验证。
+- 下一步可消化闭环任务：添加模拟评分（mock scoring）。
 
 ## 需要用户确认
 
