@@ -51,11 +51,19 @@ target_link_libraries(services_lib
 # =========================
 # SESSION 模块转成库
 # =========================
-add_library(session_lib  src/session/dialog_session.cpp)
+add_library(session_lib
+    src/session/dialog_session.cpp
+    src/session/interview_manager.cpp
+)
 
 target_include_directories(session_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(session_lib
+    PUBLIC
+        common_lib
 )
 
 # =========================
