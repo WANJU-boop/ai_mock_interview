@@ -1,0 +1,11 @@
+{
+  "interview": {
+    "candidate_name": "Demo Candidate",
+    "target_role": "C++ Intern",
+    "question_count": 3
+  },
+  "llm": {
+    "provider": "mock",
+    "model": "mock-interviewer"
+  }
+}

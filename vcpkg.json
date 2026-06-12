@@ -4,6 +4,7 @@
   "dependencies": [
     "spdlog",
     "gtest",
+    "nlohmann-json",
     "openssl",
     "boost-system",
     "boost-asio",

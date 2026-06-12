@@ -14,6 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # 依赖
 find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(openssl CONFIG REQUIRED)
 find_package(boost CONFIG REQUIRED)
 
@@ -21,7 +22,10 @@ find_package(boost CONFIG REQUIRED)
 # =========================
 # COMMON 模块转成库
 # =========================
-add_library(common_lib  src/common/logger.cpp)
+add_library(common_lib
+    src/common/config.cpp
+    src/common/logger.cpp
+)
 
 target_include_directories(common_lib
     PUBLIC
@@ -31,6 +35,8 @@ target_include_directories(common_lib
 target_link_libraries(common_lib
     PUBLIC
         spdlog::spdlog
+    PRIVATE
+        nlohmann_json::nlohmann_json
 )
 
 
@@ -54,6 +60,7 @@ target_link_libraries(services_lib
 add_library(session_lib
     src/session/dialog_session.cpp
     src/session/interview_manager.cpp
+    src/session/interview_report.cpp
 )
 
 target_include_directories(session_lib
@@ -64,6 +71,7 @@ target_include_directories(session_lib
 target_link_libraries(session_lib
     PUBLIC
         common_lib
+        nlohmann_json::nlohmann_json
 )
 
 # =========================

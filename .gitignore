@@ -1,39 +1,33 @@
-# ===== macOS =====
-.DS_Store
-
-# ===== Build directories =====
+# Build outputs
 build/
 cmake-build-*/
 out/
+bin/
+lib/
 
-# ===== CMake generated files =====
-CMakeFiles/
+# CMake
 CMakeCache.txt
-cmake_install.cmake
+CMakeFiles/
 compile_commands.json
-Makefile
 
-# ===== vcpkg =====
-vcpkg_installed/
-build/vcpkg_installed/
+# Local config and secrets
+config.local.json
+config/*.local.json
+.env
+.env.*
+!.env.example
 
-# ===== IDE / Editor =====
+# Logs and generated reports
+*.log
+logs/
+reports/
+interview_reports/
+
+# OS and editor
+.DS_Store
 .vscode/
 .idea/
 
-# ===== Logs =====
-*.log
-
-# ===== Binary / Library files =====
-*.out
-*.exe
-*.o
-*.obj
-*.a
-*.lib
-*.so
-*.dylib
-
-# ===== Debug symbols / misc cache =====
-*.dSYM/
+# Dependency caches
+vcpkg_installed/
 .cache/

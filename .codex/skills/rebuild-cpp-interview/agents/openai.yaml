@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rebuild C++ Interview"
+  short_description: "Guide staged rebuild of the interview app"
+  default_prompt: "Use $rebuild-cpp-interview to plan and implement the next beginner-friendly milestone."

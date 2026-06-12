@@ -1,0 +1,4 @@
+interface:
+  display_name: "C++ Learning Mentor"
+  short_description: "Explain project C++ concepts while coding"
+  default_prompt: "Use $cpp-learning-mentor to explain this C++ change and give a small practice task."

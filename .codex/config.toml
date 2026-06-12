@@ -1,4 +1,9 @@
-[agents]
-max_threads = 4
-max_depth = 1
-
+# Project-local Codex config placeholder.
+#
+# Keep this file conservative. Different Codex surfaces may support different
+# config keys. Put durable behavior in AGENTS.md first, and only uncomment
+# config keys after checking the Codex documentation for your installed version.
+#
+# Example ideas to verify before enabling:
+# model = "gpt-5.4"
+# reasoning_effort = "medium"
