@@ -43,7 +43,12 @@ target_link_libraries(common_lib
 # =========================
 # service 模块转成库
 # =========================
-add_library(services_lib  src/services/services.cpp)
+add_library(services_lib
+    src/services/http_llm_client.cpp
+    src/services/llm_client.cpp
+    src/services/llm_client_factory.cpp
+    src/services/services.cpp
+)
 
 target_include_directories(services_lib
     PUBLIC
@@ -51,8 +56,10 @@ target_include_directories(services_lib
 )
 
 target_link_libraries(services_lib
-    PUBLIC
+    PRIVATE
+        nlohmann_json::nlohmann_json
 )
+
 
 # =========================
 # SESSION 模块转成库
@@ -61,6 +68,7 @@ add_library(session_lib
     src/session/dialog_session.cpp
     src/session/interview_manager.cpp
     src/session/interview_report.cpp
+    src/session/interview_setup.cpp
 )
 
 target_include_directories(session_lib
@@ -69,10 +77,30 @@ target_include_directories(session_lib
 )
 
 target_link_libraries(session_lib
-    PUBLIC
+    PRIVATE
         common_lib
+    PUBLIC
         nlohmann_json::nlohmann_json
 )
+
+
+# =========================
+# APP 模块转成库
+# =========================
+add_library(app_lib
+    src/app/cli_interview_app.cpp
+)
+
+target_include_directories(app_lib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(app_lib
+    PUBLIC
+        session_lib
+)
+
 
 # =========================
 # 主程序
@@ -83,10 +111,11 @@ add_executable(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
+        app_lib
         common_lib
         services_lib
-        session_lib
 )
+
 
 # =========================
 # 3. 测试

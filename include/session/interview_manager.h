@@ -1,5 +1,7 @@
 #pragma once
 
+#include "services/llm_client.h"
+
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -8,12 +10,6 @@ namespace interview {
 namespace session {
 
 class DialogSession;
-
-// 模拟评分结果，同时返回分数和一条可直接展示的反馈语。
-struct MockScoreResult {
-    int score = 0;
-    std::string feedback;
-};
 
 // 追问决策结果：说明当前回答是否需要补充追问，以及追问文本。
 struct FollowUpDecision {
@@ -25,11 +21,12 @@ struct FollowUpDecision {
 // 1. 持有固定问题列表
 // 2. 暴露当前题目
 // 3. 记录回答
-// 4. 提供简单的规则评分
+// 4. 通过抽象的 LLM 接口评分
 // 5. 根据评分结果决定是否追问
 class InterviewManager {
-public:
-    explicit InterviewManager(std::vector<std::string> questions);
+  public:
+    // 通过依赖注入接入题目评分能力，这样主流程可以先用 mock，后续再替换成真实服务。
+    InterviewManager(std::vector<std::string> questions, services::ILlmClient& llm_client);
 
     // 判断当前是否还有可供提问的问题。
     bool hasCurrentQuestion() const;
@@ -40,11 +37,11 @@ public:
     // 在存在当前题目的前提下，把回答写入会话对象。
     bool recordCandidateAnswer(DialogSession& session, const std::string& answer);
 
-    // 对单条回答做规则驱动的模拟评分，不修改流程状态。
-    MockScoreResult scoreCandidateAnswer(const std::string& answer) const;
+    // 使用当前题目和回答调用评分接口，不修改流程状态。
+    services::LlmScoreResult scoreCandidateAnswer(const std::string& answer) const;
 
     // 根据评分结果决定是否需要追问，以及给出一条固定追问提示。
-    FollowUpDecision decideFollowUp(const MockScoreResult& score_result) const;
+    FollowUpDecision decideFollowUp(const services::LlmScoreResult& score_result) const;
 
     // 推进到下一题；如果已经到末尾，则返回 false。
     bool moveToNextQuestion();
@@ -52,12 +49,14 @@ public:
     // 返回总题数，主要用于 CLI 展示“第几题/共几题”。
     std::size_t getQuestionCount() const;
 
-private:
+  private:
+    // 当前 milestone 用抽象接口隔离评分实现，避免 InterviewManager 和 mock 各写一套规则。
+    services::ILlmClient& llm_client_;
     // 固定问题列表，当前 MVP 不接入题目生成服务。
     std::vector<std::string> questions_;
     // 当前正在处理的问题下标。
     std::size_t current_question_index_ = 0;
 };
 
-}  // namespace session
-}  // namespace interview
+} // namespace session
+} // namespace interview
