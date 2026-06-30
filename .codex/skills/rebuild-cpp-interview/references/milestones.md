@@ -1,89 +1,75 @@
 # Milestones
 
-## 0. Repository Skeleton
+This project should be learned in one broad pass first, then deepened in later passes. For a beginner, avoid turning every LLM, audio, WebSocket, or Qt detail into a separate long milestone during the first half-month.
 
-Output: CMake project, `src/main.cpp`, `include/`, `tests/`, `.clang-format`, `.gitignore`.
+## 1. Build And Common Basics
 
-Learn: compiler, CMake target, include paths, build directory.
+Approximate days: Day 1-2.
 
-Verify: configure, build, run hello command, run empty test target if present.
+Output: buildable CMake project, configuration loading, logging, simple validation, and a clear local run command.
 
-## 1. Common Utilities
+Learn: compiler errors, CMake targets, include paths, JSON config, environment variables, and why secrets stay outside git.
 
-Output: logger wrapper, config loader with JSON validation, simple state enum.
+Verify: configure/build succeeds; config tests cover missing keys, wrong types, and a valid example.
 
-Learn: namespaces, headers, source files, exceptions, `nlohmann::json`.
+## 2. Interview Domain And CLI Flow
 
-Verify: unit tests for missing config keys and invalid values.
+Approximate days: Day 3-4.
 
-## 2. Interview Domain
+Output: question list, answer recording, score records, session completion, report JSON, and a CLI learning loop.
 
-Output: `InterviewSession` with questions, answers, scores, report serialization.
+Learn: `struct` vs `class`, vectors, strings, value semantics, single responsibility, and keeping domain logic independent from UI/network code.
 
-Learn: classes, structs, vectors, value semantics, timestamps, JSON serialization.
+Verify: tests for next question, answer recording, completion, report serialization, plus one manual CLI run.
 
-Verify: tests for next question, answer recording, completion, report JSON.
+## 3. LLM Path With Mock And HTTP
 
-## 3. LLM Abstraction
+Approximate days: Day 5-8.
 
-Output: `ILlmClient`, `MockLlmClient`, later `HttpLlmClient`.
+Output: `ILlmClient`, `MockLlmClient`, `HttpLlmClient`, fake HTTP transport tests, simple prompt rules, scoring feedback, and report integration.
 
-Learn: interfaces, dependency injection, HTTP boundaries, error fallback.
+Learn: interfaces, dependency injection, why tests use mocks, JSON request/response handling, API key environment variables, base URL, status-code errors, and basic prompt design.
 
-Verify: domain tests use mock; one manual integration command can call the real API.
+Verify: unit tests do not require network; fake transport tests cover URL, headers, body, bad JSON, missing fields, score range, and non-2xx responses. Real LLM calls stay as manual integration checks.
 
-## 4. PDF Abstraction
+## 4. External Service Boundaries
 
-Output: `IPdfParser`, fake parser for tests, real parser behind PoDoFo or another library.
+Approximate days: Day 9-10.
 
-Learn: adapter pattern, file validation, UTF-8 text, dependency isolation.
+Output: lightweight boundaries for PDF parsing, realtime protocol/event parsing, and mock service data.
 
-Verify: tests use sample text file or fake parser; real PDF test is optional/manual.
+Learn: adapter pattern, binary protocol basics, enum values, payload boundaries, and how to keep third-party services outside core domain tests.
 
-## 5. Protocol Codec
+Verify: tests use fake PDF text or fixed byte/event fixtures. Real PDF and realtime services remain optional manual checks in the first pass.
 
-Output: binary protocol header generation, response parser, compression helpers if needed.
+## 5. Dialogue, Audio, WebSocket, And Qt Overview
 
-Learn: bytes, endian conversion, enum class, binary layout, parser tests.
+Approximate days: Day 11-14.
 
-Verify: unit tests with known byte fixtures.
+Output: mock dialogue orchestration, audio/WebSocket learning notes or smoke checks, and a minimal Qt window that can display interview state.
 
-## 6. Dialogue Orchestration
+Learn: callbacks, state transitions, event queues, thread ownership, shutdown order, audio vocabulary, WebSocket connection lifecycle, Qt signals/slots, and main-thread UI updates.
 
-Output: `DialogSession` using mock realtime/audio clients.
+Verify: deterministic mock event sequence test, optional audio smoke test, optional manual WebSocket check, and manual Qt window run.
 
-Learn: callbacks, state transitions, queues, thread ownership, shutdown order.
+## 6. Review, Documentation, And Next Iteration
 
-Verify: deterministic tests for event sequences.
+Approximate day: Day 15.
 
-## 7. Audio Integration
+Output: README updates, development record, known gaps, and a second-pass backlog.
 
-Output: PortAudio adapter with explicit open/read/write/cleanup lifecycle.
+Learn: small commits, clean diffs, test reporting, and how to turn a learning prototype into a maintainable project.
 
-Learn: RAII, blocking I/O, sample format, device errors, permissions.
+Verify: build and relevant tests pass, `git status` is understood, skipped checks are documented.
 
-Verify: manual device listing or short local record/play smoke test.
+## Second-Pass Deepening Backlog
 
-## 8. Realtime WebSocket Integration
+After the first half-month pass, deepen these areas one by one:
 
-Output: realtime client that connects, sends audio/text, receives events.
-
-Learn: TLS, WebSocket handshake, auth headers, background receive thread.
-
-Verify: manual integration test with local config and no committed secrets.
-
-## 9. Qt UI
-
-Output: main window, config dialog, state display, transcript area, progress.
-
-Learn: Qt signals/slots, main-thread UI updates, worker thread safety.
-
-Verify: manual run plus screenshot or checklist.
-
-## 10. GitHub Polish
-
-Output: README, CI, PR template, release checklist.
-
-Learn: commits, branches, CI signals, review habit.
-
-Verify: clean `git status`, passing CI or documented skipped checks.
+- Prompt builder and conversation history control.
+- Structured question, scoring, and follow-up payloads.
+- LLM response validation and safety guardrails.
+- Real PDF parser integration.
+- Real PortAudio adapter.
+- Real WebSocket realtime client and streaming output.
+- Qt UI polish and packaging.

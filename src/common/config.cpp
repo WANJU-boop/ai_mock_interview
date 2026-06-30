@@ -85,6 +85,10 @@ int readPositiveIntWithDefault(const nlohmann::json& parent, const std::string& 
     return requirePositiveInt(parent, key);
 }
 
+bool startsWith(const std::string& value, const std::string& prefix) {
+    return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
 void validateLlmConfig(const AppConfig& config) {
     if (config.llm.provider != "http") {
         return;
@@ -93,6 +97,9 @@ void validateLlmConfig(const AppConfig& config) {
     // 真实 provider 的关键字段尽早在配置层报错，避免启动后才在服务层走到半截失败。
     if (config.llm.base_url.empty()) {
         throw std::runtime_error("HTTP provider requires non-empty llm.base_url");
+    }
+    if (!startsWith(config.llm.base_url, "https://")) {
+        throw std::runtime_error("HTTP provider requires llm.base_url to start with https://");
     }
     if (config.llm.api_key_env.empty()) {
         throw std::runtime_error("HTTP provider requires non-empty llm.api_key_env");

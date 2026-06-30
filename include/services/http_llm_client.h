@@ -45,9 +45,9 @@ class IHttpTransport {
 // 3. 把响应解析回当前项目的稳定领域结构
 class HttpLlmClient final : public ILlmClient {
   public:
-    // transport 允许为空，这样 factory 先能接入类型；真正发请求时会返回清晰错误。
+    // transport 必须在构造时注入，避免把“可创建但不可用”的半成品客户端带进主流程。
     explicit HttpLlmClient(const common::LlmConfig& config,
-                           std::shared_ptr<IHttpTransport> transport = nullptr);
+                           std::shared_ptr<IHttpTransport> transport);
 
     std::vector<std::string> generateQuestions(const QuestionGenerationRequest& request) override;
     LlmScoreResult scoreAnswer(const AnswerScoringRequest& request) override;

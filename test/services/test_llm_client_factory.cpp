@@ -49,6 +49,19 @@ TEST(LlmClientFactoryTest, CreatesHttpClientForHttpProvider) {
     EXPECT_NE(dynamic_cast<interview::services::HttpLlmClient*>(client.get()), nullptr);
 }
 
+// 验证真实 provider 的非法配置会在工厂创建阶段直接失败，避免入口层带着坏客户端继续运行。
+TEST(LlmClientFactoryTest, ThrowsWhenHttpProviderConfigIsInvalid) {
+    interview::common::LlmConfig config = makeLlmConfig("http");
+    config.base_url = "http://api.openai.com/v1";
+
+    EXPECT_THROW(
+        {
+            const std::unique_ptr<interview::services::ILlmClient> client =
+                interview::services::createLlmClient(config);
+        },
+        std::runtime_error);
+}
+
 // 验证不支持的 provider 会在 services 层统一报错，避免入口层散落实现相关分支。
 TEST(LlmClientFactoryTest, ThrowsForUnsupportedProvider) {
     const interview::common::LlmConfig config = makeLlmConfig("unknown");

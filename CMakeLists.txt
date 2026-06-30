@@ -16,7 +16,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(openssl CONFIG REQUIRED)
-find_package(boost CONFIG REQUIRED)
+find_package(boost_asio CONFIG REQUIRED)
+find_package(boost_beast CONFIG REQUIRED)
+find_package(boost_system CONFIG REQUIRED)
 
 
 # =========================
@@ -44,6 +46,7 @@ target_link_libraries(common_lib
 # service 模块转成库
 # =========================
 add_library(services_lib
+    src/services/beast_http_transport.cpp
     src/services/http_llm_client.cpp
     src/services/llm_client.cpp
     src/services/llm_client_factory.cpp
@@ -58,6 +61,11 @@ target_include_directories(services_lib
 target_link_libraries(services_lib
     PRIVATE
         nlohmann_json::nlohmann_json
+        OpenSSL::Crypto
+        OpenSSL::SSL
+        Boost::asio
+        Boost::beast
+        Boost::system
 )
 
 

@@ -275,6 +275,47 @@ TEST(ConfigTest, ThrowsWhenHttpProviderMissesBaseUrl) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证真实 provider 仍然要求显式声明密钥环境变量，避免把 401 混进启动错误里。
+TEST(ConfigTest, ThrowsWhenHttpProviderMissesApiKeyEnv) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "http_missing_api_key_env_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "http",
+                "model": "gpt-4o-mini",
+                "base_url": "https://api.openai.com/v1"
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证配置层会拒绝明文 HTTP，避免未来真实请求绕过 TLS 校验预期。
+TEST(ConfigTest, ThrowsWhenHttpProviderUsesNonHttpsBaseUrl) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "http_non_https_config_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "http",
+                "model": "gpt-4o-mini",
+                "base_url": "http://api.openai.com/v1",
+                "api_key_env": "OPENAI_API_KEY"
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
 // 验证超时字段必须保持正整数，避免后续真实网络调用在配置层出现歧义。
 TEST(ConfigTest, ThrowsWhenTimeoutMsIsNotPositive) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /

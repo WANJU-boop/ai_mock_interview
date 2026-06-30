@@ -1,174 +1,84 @@
-# 从 0 复刻学习路线
+# 15 天复刻学习路线
 
-## 总原则
+## 学习目标
 
-每一阶段都要产出一个能运行或能测试的小结果。不要一开始就接入 Qt、音频、WebSocket 和真实 LLM。
+这份路线的目标是：用大约半个月理解并搭出这个 C++ AI 模拟面试项目的完整骨架。这里的“完整”不是指所有外部服务都做到生产级，而是指你能看懂项目为什么这样分层，并且有一个能运行、能测试、能继续扩展的学习版本。
 
-参考源项目当前实际入口是 Qt GUI；本路线先从 CLI 和纯 C++ 逻辑开始，是为了降低新手学习成本。到阶段 10 再切回 Qt UI 形态。
-
-## 阶段 0：空项目能编译
-
-目标：创建 CMake C++17 项目，输出一行程序版本。
-
-学习点：
-
-- CMake 基础。
-- `src/`、`include/`、`tests/` 的目录意义。
-- Debug 构建和编译错误阅读。
-
-建议 Codex 提示：
+最终效果保持这个方向：
 
 ```text
-Use $rebuild-cpp-interview to implement milestone 0. Keep it beginner-friendly and add the smallest possible CMake project.
+创建面试会话
+  -> 生成或加载问题
+  -> 候选人回答
+  -> LLM 生成评分、反馈或追问
+  -> 保存对话和评分
+  -> 生成报告
+  -> 后续接入语音、WebSocket 和 Qt UI
 ```
 
-验证：
+半个月内优先学“主链路”和“架构边界”，不要一开始追求所有细节。每一天都只完成一个可以验证的小目标。
 
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j
-./build/<your-executable>
+## 15 天安排
+
+| 天数 | 学习主题 | 你要做出的结果 | 验证方式 |
+| --- | --- | --- | --- |
+| Day 1 | 项目结构和 CMake | 看懂 `src/`、`include/`、`tests/`，能构建项目 | `cmake --build build -j` |
+| Day 2 | 配置和日志 | 看懂配置文件、环境变量、日志怎么进入程序 | 配置缺字段和合法配置测试 |
+| Day 3 | 面试领域模型 | 看懂问题、回答、评分、报告这些核心数据结构 | 领域单元测试 |
+| Day 4 | 面试主流程 | 跑通 CLI 文字面试闭环 | 手动跑一次面试 |
+| Day 5 | LLM 接口和 mock | 理解为什么先写 `ILlmClient` 和 `MockLlmClient` | 测试不依赖网络 |
+| Day 6 | HTTP LLM 客户端 | 看懂 base URL、API key、JSON 请求和响应解析 | fake transport 测试 |
+| Day 7 | Prompt 和上下文 | 只做轻量整理：角色、规则、当前回答、最近历史 | prompt 相关小测试 |
+| Day 8 | 评分和报告 | 把 LLM 结果变成项目里的评分、反馈和报告字段 | 报告 JSON 测试 |
+| Day 9 | PDF 简历解析边界 | 先理解 `IPdfParser` 为什么存在，不急着做复杂 PDF | mock parser 测试 |
+| Day 10 | 协议和 realtime 概念 | 理解事件、payload、状态流，不急着真实联网 | 固定事件或 byte 测试 |
+| Day 11 | 对话编排 | 用 mock 事件串起“说话、识别、LLM 回复、继续提问” | 状态机事件序列测试 |
+| Day 12 | 音频基础 | 理解采样率、声道、PCM、设备权限 | 手动 smoke test 或只读学习 |
+| Day 13 | WebSocket 基础 | 理解连接、鉴权、收发线程、关闭策略 | 手动集成计划，不进默认测试 |
+| Day 14 | Qt UI 骨架 | 看懂主窗口、按钮、状态展示、信号槽 | 手动打开窗口 |
+| Day 15 | 总复盘和工程化 | 整理 README、学习记录、后续优化清单 | 构建、测试、`git status` |
+
+## 两周内的学习重点
+
+1. 先理解主流程：配置 -> 面试会话 -> LLM/mock -> 评分 -> 报告。
+2. 再理解外部服务边界：LLM、PDF、音频、WebSocket 都先用接口隔离。
+3. 最后理解 UI：Qt 只是展示和触发流程，不应该直接控制网络或音频细节。
+
+## LLM 部分先学到什么程度
+
+半个月内不用把 LLM prompt、上下文、guardrail、streaming 全部做深。先掌握这些就够：
+
+1. `ILlmClient` 表示“项目需要 LLM 做什么”。
+2. `IHttpTransport` 表示“HTTP 请求怎么发出去”。
+3. `MockLlmClient` 让测试不用真实 API key 和网络。
+4. `HttpLlmClient` 负责把项目请求转成 JSON，再把服务响应解析回项目结构。
+5. Prompt 先保持简单清楚：角色是面试官，输入是岗位、题目、回答，输出是 JSON。
+
+更细的优化，例如多轮上下文压缩、few-shot 示例、流式输出、内容安全过滤，可以放到半个月后的第二轮迭代。
+
+## 每天学习时怎么问 Codex
+
+不要一次说“帮我实现完整项目”。按天推进，例如：
+
+```text
+用 rebuild-cpp-interview skill 带我学习 Day 6：HTTP LLM 客户端。
+先讲清楚这个模块在项目里的位置，再看代码，再指出我应该改或练习的一个小点。
 ```
 
-## 阶段 1：配置和日志
+如果某天你只想学习不想改代码，就明确说：
 
-目标：读取 `config.example.json`，校验字段，输出日志。
+```text
+今天只讲解，不改代码。请从新手角度解释 Day 7 的 Prompt 和上下文。
+```
 
-学习点：
+## 半个月后的第二轮优化
 
-- 头文件和源文件分离。
-- `nlohmann::json`。
-- 异常处理。
-- 不提交本地密钥。
+第一轮结束后，再开始补深度功能：
 
-验证：缺字段、错类型、合法配置都要有测试。
-
-## 阶段 2：面试领域模型
-
-目标：不用 AI，也能完成“问题列表 -> 回答 -> 分数 -> 报告 JSON”。
-
-学习点：
-
-- `struct` 和 `class` 的选择。
-- `std::vector`、`std::string`。
-- 单一职责。
-- 可测试设计。
-
-验证：测试下一题、记录回答、完成状态、报告内容。
-
-## 阶段 3：LLM 接口和 mock
-
-目标：定义 `ILlmClient`，先用 `MockLlmClient` 返回固定问题和评分。
-
-学习点：
-
-- 接口隔离。
-- 依赖注入。
-- 为什么单元测试不应该调用真实网络。
-
-验证：领域测试只依赖 mock。
-
-## 阶段 4：真实 LLM 客户端
-
-目标：用 libcurl 或其他 HTTP 库调用 OpenAI 兼容接口。
-
-学习点：
-
-- HTTP POST。
-- JSON 请求和响应。
-- 超时、错误码、解析失败。
-- API key 本地配置。
-
-验证：保留手动集成命令，不放入默认 CI。
-
-## 阶段 5：PDF 简历解析
-
-目标：定义 `IPdfParser`，先用假文本，再接真实 PDF 库。
-
-学习点：
-
-- 文件 I/O。
-- UTF-8 文本。
-- 第三方库适配器。
-
-验证：普通文本或 mock parser 测试问题生成。
-
-## 阶段 6：协议编解码
-
-目标：实现 realtime 协议的 header、payload、event 解析。
-
-学习点：
-
-- 二进制数据。
-- 字节序。
-- `enum class`。
-- 边界测试。
-
-验证：用固定 byte fixture 测试 parser。
-
-## 阶段 7：对话编排
-
-目标：用 mock realtime client 模拟 TTS、ASR、用户说话事件，驱动状态机。
-
-学习点：
-
-- 回调。
-- 状态转换。
-- 队列。
-- 线程关闭顺序。
-
-验证：事件序列测试，例如 TTS_START -> TTS_END -> ASR_RESULT。
-
-## 阶段 8：音频
-
-目标：PortAudio 适配器能打开设备，短录短放。
-
-学习点：
-
-- RAII。
-- 阻塞 I/O。
-- 采样率、声道、PCM。
-- 设备权限。
-
-验证：手动 smoke test，失败时输出清晰错误。
-
-## 阶段 9：WebSocket 实时服务
-
-目标：真实连接服务，发送文本或音频，接收事件。
-
-学习点：
-
-- TLS/WebSocket。
-- 鉴权 header。
-- 后台接收线程。
-- 网络错误恢复。
-- socket 读写关闭的线程归属。
-
-验证：手动集成测试，不进入默认单元测试。
-
-## 阶段 10：Qt UI
-
-目标：主窗口能配置会话、开始面试、显示状态和对话。
-
-学习点：
-
-- Qt signals/slots。
-- 主线程 UI 更新。
-- worker thread。
-- UI 状态来自状态机。
-- 对象销毁前取消回调。
-
-验证：人工检查窗口、按钮状态、日志、错误弹窗。
-
-## 阶段 11：工程化
-
-目标：补 README、CI、PR 模板、发布说明。
-
-学习点：
-
-- Git 分支。
-- 小提交。
-- CI。
-- PR review。
-
-验证：CI 或本地完整构建通过。
+- 更稳定的 prompt builder。
+- 更完整的对话历史和 token 长度控制。
+- 更结构化的问题、评分和追问结果。
+- LLM 输出校验和敏感信息保护。
+- 真实 PDF 解析。
+- 真实 WebSocket 和音频链路。
+- Qt UI 体验优化。

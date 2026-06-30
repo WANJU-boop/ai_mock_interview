@@ -12,7 +12,7 @@ struct InterviewConfig {
 };
 
 struct LlmConfig {
-    std::string provider;
+    std::string provider; // mock 或者 http
     std::string model;
     // 真实 HTTP 客户端默认按 OpenAI 兼容接口拼接 /chat/completions。
     std::string base_url;
