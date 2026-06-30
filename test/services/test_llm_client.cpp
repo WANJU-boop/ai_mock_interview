@@ -65,7 +65,7 @@ TEST(MockLlmClientTest, UsesFallbackRoleWhenTargetRoleEmpty) {
     const std::vector<std::string> questions = client.generateQuestions({"Demo Candidate", "", 1});
 
     ASSERT_EQ(questions.size(), 1u);
-    EXPECT_NE(questions.front().find("C++ learner"), std::string::npos);
+    EXPECT_NE(questions.front().find("C++ 学习者"), std::string::npos);
 }
 
 // 请求数量超过模板题库时要追加序号，避免 mock 生成一组完全重复的问题。
@@ -94,7 +94,7 @@ TEST(MockLlmClientTest, ScoresEmptyAnswerAsZero) {
     const interview::services::LlmScoreResult result = client.scoreAnswer({"What is C++?", ""});
 
     EXPECT_EQ(result.score, 0);
-    EXPECT_EQ(result.feedback, "No answer provided.");
+    EXPECT_EQ(result.feedback, "未提供回答。");
 }
 
 // 详细回答应该显著高于短回答，验证 mock 评分能支持后续流程测试。
@@ -110,8 +110,22 @@ TEST(MockLlmClientTest, ScoresDetailedAnswerHigherThanShortAnswer) {
                                             "ownership, debugging, and testing in real code."});
 
     EXPECT_LT(short_result.score, detailed_result.score);
-    EXPECT_EQ(short_result.feedback, "Answer is too short. Add more detail.");
+    EXPECT_EQ(short_result.feedback, "回答太短，建议补充更多细节。");
     EXPECT_GE(detailed_result.score, 90);
+}
+
+// 中文回答通常不靠空格分词，这个用例锁定“中文长回答也能拿到合理高分”的运行体验。
+TEST(MockLlmClientTest, ScoresChineseDetailedAnswerWithoutSpaces) {
+    interview::services::MockLlmClient client;
+
+    const interview::services::LlmScoreResult result =
+        client.scoreAnswer({"请说明一个 C++ 项目经验。",
+                            "我最近做了一个C++日志项目，练习RAII、所有权、测试、调试和设计取舍，"
+                            "也会结合具体代码说明资源管理和接口隔离。"});
+
+    EXPECT_GE(result.score, 90);
+    EXPECT_LE(result.score, 100);
+    EXPECT_EQ(result.feedback, "回答扎实，包含具体细节。");
 }
 
 // 即使回答很长并命中多个关键词，mock 评分也必须保持在 0 到 100 的稳定区间内。
@@ -127,7 +141,7 @@ TEST(MockLlmClientTest, KeepsDetailedAnswerScoreWithinRange) {
 
     EXPECT_GE(result.score, 90);
     EXPECT_LE(result.score, 100);
-    EXPECT_EQ(result.feedback, "Strong answer with concrete detail.");
+    EXPECT_EQ(result.feedback, "回答扎实，包含具体细节。");
 }
 
 // 关键词判断不应受大小写影响，否则候选人的自然输入会导致评分不稳定。
@@ -140,5 +154,5 @@ TEST(MockLlmClientTest, ScoresTechnicalKeywordCaseInsensitively) {
          "I use CLASS examples and POINTER practice to explain ownership in my current project."});
 
     EXPECT_GE(result.score, 65);
-    EXPECT_EQ(result.feedback, "Good answer, but add one concrete example.");
+    EXPECT_EQ(result.feedback, "回答不错，但建议补充一个具体例子。");
 }

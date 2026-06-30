@@ -108,8 +108,8 @@ TEST(HttpLlmClientTest, BuildsQuestionRequestAndParsesStructuredQuestionResponse
     EXPECT_EQ(findHeaderValue(transport->last_request.headers, "Authorization"),
               "Bearer fake-api-key");
     EXPECT_NE(transport->last_request.body.find("\"model\":\"gpt-4o-mini\""), std::string::npos);
-    EXPECT_NE(transport->last_request.body.find("Generate 2 concise C++ interview questions"),
-              std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("生成 2 道面向"), std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("题目必须使用中文"), std::string::npos);
     EXPECT_NE(transport->last_request.body.find("C++ Intern"), std::string::npos);
 }
 
@@ -151,7 +151,7 @@ TEST(HttpLlmClientTest, ScoresAnswerFromStructuredJsonResponse) {
     const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
     transport->next_response = {200, R"({
         "score": 81,
-        "feedback": "Good answer, but add one concrete example."
+        "feedback": "回答不错，但建议补充一个具体例子。"
     })"};
 
     interview::services::HttpLlmClient client(makeHttpConfig(), transport);
@@ -160,10 +160,9 @@ TEST(HttpLlmClientTest, ScoresAnswerFromStructuredJsonResponse) {
         {"Explain RAII.", "I use RAII in a logger project to manage file ownership safely."});
 
     EXPECT_EQ(result.score, 81);
-    EXPECT_EQ(result.feedback, "Good answer, but add one concrete example.");
+    EXPECT_EQ(result.feedback, "回答不错，但建议补充一个具体例子。");
     EXPECT_EQ(transport->call_count, 1);
-    EXPECT_NE(transport->last_request.body.find("Return JSON with integer score"),
-              std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("请返回 JSON，包含整数 score"), std::string::npos);
 }
 
 // 验证没有注入 transport 时会在构造阶段尽早失败，不再创建“可用性未知”的半成品客户端。

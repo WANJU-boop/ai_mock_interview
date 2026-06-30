@@ -1,7 +1,7 @@
 {
   "interview": {
-    "candidate_name": "Demo Candidate",
-    "target_role": "C++ Intern",
+    "candidate_name": "演示候选人",
+    "target_role": "C++ 实习生",
     "question_count": 3
   },
   "llm": {

@@ -43,8 +43,7 @@ PreparedInterview prepareInterview(const common::InterviewConfig& config,
     std::vector<std::string> questions = llm_client.generateQuestions(
         {config.candidate_name, config.target_role, config.question_count});
     if (questions.empty()) {
-        return {config.candidate_name, config.target_role,
-                "Failed to start interview because no questions were generated."};
+        return {config.candidate_name, config.target_role, "面试启动失败：没有生成任何问题。"};
     }
 
     return {config, std::move(questions), llm_client};

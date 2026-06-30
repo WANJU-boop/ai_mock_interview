@@ -40,10 +40,10 @@ void Logger::Init(const std::string& log_file, bool debug_mode) {
         // 设置为 spdlog 默认 logger，后续扩展第三方封装时也能复用同一份配置。
         spdlog::set_default_logger(logger_);
 
-        LOG_INFO("Logger initialized - Debug mode: {}", debug_mode);
+        LOG_INFO("日志系统已初始化，debug 模式：{}", debug_mode);
     } catch (const spdlog::spdlog_ex& ex) {
         // 日志初始化失败时，至少把错误打到标准错误，避免静默失败。
-        std::cerr << "Log initialization failed: " << ex.what() << std::endl;
+        std::cerr << "日志初始化失败：" << ex.what() << std::endl;
     }
 }
 

@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
         // main 只保留初始化和错误码返回，把可测试的主流程交给 app 层函数。
         return interview::app::runCliInterview(std::cin, std::cout, prepared_interview);
     } catch (const std::exception& error) {
-        std::cerr << "Failed to initialize interview app: " << error.what() << '\n';
+        std::cerr << "面试应用初始化失败：" << error.what() << '\n';
         return 1;
     }
 }

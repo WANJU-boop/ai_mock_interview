@@ -16,12 +16,12 @@ const char kDefaultConfigFileName[] = "config.example.json";
 
 const nlohmann::json& requireObject(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
-        throw std::runtime_error("Missing config section: " + key);
+        throw std::runtime_error("配置缺少 section：" + key);
     }
 
     const nlohmann::json& value = parent.at(key);
     if (!value.is_object()) {
-        throw std::runtime_error("Config section must be an object: " + key);
+        throw std::runtime_error("配置 section 必须是对象：" + key);
     }
 
     return value;
@@ -29,17 +29,17 @@ const nlohmann::json& requireObject(const nlohmann::json& parent, const std::str
 
 std::string requireString(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
-        throw std::runtime_error("Missing config field: " + key);
+        throw std::runtime_error("配置缺少字段：" + key);
     }
 
     const nlohmann::json& value = parent.at(key);
     if (!value.is_string()) {
-        throw std::runtime_error("Config field must be a string: " + key);
+        throw std::runtime_error("配置字段必须是字符串：" + key);
     }
 
     const std::string result = value.get<std::string>();
     if (result.empty()) {
-        throw std::runtime_error("Config field must not be empty: " + key);
+        throw std::runtime_error("配置字段不能为空：" + key);
     }
 
     return result;
@@ -52,7 +52,7 @@ std::string readOptionalString(const nlohmann::json& parent, const std::string& 
 
     const nlohmann::json& value = parent.at(key);
     if (!value.is_string()) {
-        throw std::runtime_error("Config field must be a string: " + key);
+        throw std::runtime_error("配置字段必须是字符串：" + key);
     }
 
     return value.get<std::string>();
@@ -60,17 +60,17 @@ std::string readOptionalString(const nlohmann::json& parent, const std::string& 
 
 int requirePositiveInt(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
-        throw std::runtime_error("Missing config field: " + key);
+        throw std::runtime_error("配置缺少字段：" + key);
     }
 
     const nlohmann::json& value = parent.at(key);
     if (!value.is_number_integer()) {
-        throw std::runtime_error("Config field must be an integer: " + key);
+        throw std::runtime_error("配置字段必须是整数：" + key);
     }
 
     const int result = value.get<int>();
     if (result <= 0) {
-        throw std::runtime_error("Config field must be positive: " + key);
+        throw std::runtime_error("配置字段必须是正数：" + key);
     }
 
     return result;
@@ -96,13 +96,13 @@ void validateLlmConfig(const AppConfig& config) {
 
     // 真实 provider 的关键字段尽早在配置层报错，避免启动后才在服务层走到半截失败。
     if (config.llm.base_url.empty()) {
-        throw std::runtime_error("HTTP provider requires non-empty llm.base_url");
+        throw std::runtime_error("HTTP provider 要求 llm.base_url 不能为空");
     }
     if (!startsWith(config.llm.base_url, "https://")) {
-        throw std::runtime_error("HTTP provider requires llm.base_url to start with https://");
+        throw std::runtime_error("HTTP provider 要求 llm.base_url 以 https:// 开头");
     }
     if (config.llm.api_key_env.empty()) {
-        throw std::runtime_error("HTTP provider requires non-empty llm.api_key_env");
+        throw std::runtime_error("HTTP provider 要求 llm.api_key_env 不能为空");
     }
 }
 
@@ -147,18 +147,18 @@ std::string findDefaultConfigPath(const std::string& executable_path) {
 AppConfig loadConfigFromFile(const std::string& file_path) {
     std::ifstream input(file_path);
     if (!input.is_open()) {
-        throw std::runtime_error("Failed to open config file: " + file_path);
+        throw std::runtime_error("无法打开配置文件：" + file_path);
     }
 
     nlohmann::json root;
     try {
         input >> root;
     } catch (const nlohmann::json::parse_error& error) {
-        throw std::runtime_error("Failed to parse config JSON: " + std::string(error.what()));
+        throw std::runtime_error("无法解析配置 JSON：" + std::string(error.what()));
     }
 
     if (!root.is_object()) {
-        throw std::runtime_error("Config root must be an object");
+        throw std::runtime_error("配置根节点必须是对象");
     }
 
     const nlohmann::json& interview = requireObject(root, "interview");

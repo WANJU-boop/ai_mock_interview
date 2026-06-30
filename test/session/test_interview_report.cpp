@@ -16,7 +16,7 @@ interview::session::QuestionAnswerRecord makeRecord(const std::string& question,
     interview::session::QuestionAnswerRecord record;
     record.question = question;
     record.candidate_answer = answer;
-    record.final_score = {score, "Generated feedback."};
+    record.final_score = {score, "生成的反馈。"};
     return record;
 }
 
@@ -38,23 +38,22 @@ TEST(InterviewReportTest, SerializesQuestionAnswerRecordWithoutFollowUp) {
     interview::session::DialogSession session;
 
     interview::session::QuestionAnswerRecord record;
-    record.question = "What is one C++ concept you are learning?";
-    record.candidate_answer = "I am learning class design with a small project.";
-    record.final_score = {92, "Strong answer with concrete detail."};
+    record.question = "你最近在学习哪个 C++ 概念？";
+    record.candidate_answer = "我在一个小项目里练习类设计。";
+    record.final_score = {92, "回答扎实，包含具体细节。"};
     session.addQuestionAnswerRecord(record);
 
     const nlohmann::json report = interview::session::buildInterviewReportJson(session);
     const nlohmann::json& saved_record = report.at("question_answer_records").at(0);
 
     EXPECT_EQ(report.at("question_count"), 1u);
-    EXPECT_EQ(saved_record.at("question"), "What is one C++ concept you are learning?");
-    EXPECT_EQ(saved_record.at("candidate_answer"),
-              "I am learning class design with a small project.");
+    EXPECT_EQ(saved_record.at("question"), "你最近在学习哪个 C++ 概念？");
+    EXPECT_EQ(saved_record.at("candidate_answer"), "我在一个小项目里练习类设计。");
     EXPECT_FALSE(saved_record.at("has_follow_up"));
     EXPECT_EQ(saved_record.at("follow_up_prompt"), "");
     EXPECT_EQ(saved_record.at("follow_up_answer"), "");
     EXPECT_EQ(saved_record.at("final_score").at("score"), 92);
-    EXPECT_EQ(saved_record.at("final_score").at("feedback"), "Strong answer with concrete detail.");
+    EXPECT_EQ(saved_record.at("final_score").at("feedback"), "回答扎实，包含具体细节。");
 }
 
 // 有追问时，追问提示和追问回答必须分开保存，后续报告才能清楚展示对话层次。
@@ -62,46 +61,43 @@ TEST(InterviewReportTest, SerializesQuestionAnswerRecordWithFollowUp) {
     interview::session::DialogSession session;
 
     interview::session::QuestionAnswerRecord record;
-    record.question = "Which project detail would you improve next?";
-    record.candidate_answer = "I would improve the CLI flow.";
+    record.question = "你接下来想改进哪个项目细节？";
+    record.candidate_answer = "我想改进 CLI 流程。";
     record.has_follow_up = true;
-    record.follow_up_prompt =
-        "Could you explain one specific design choice or tradeoff in more detail?";
-    record.follow_up_answer = "I would separate input collection from summary formatting.";
-    record.final_score = {86, "Strong answer with concrete detail."};
+    record.follow_up_prompt = "能不能再展开一个具体设计选择或取舍？";
+    record.follow_up_answer = "我会把输入收集和总结格式化分开。";
+    record.final_score = {86, "回答扎实，包含具体细节。"};
     session.addQuestionAnswerRecord(record);
 
     const nlohmann::json report = interview::session::buildInterviewReportJson(session);
     const nlohmann::json& saved_record = report.at("question_answer_records").at(0);
 
     EXPECT_TRUE(saved_record.at("has_follow_up"));
-    EXPECT_EQ(saved_record.at("follow_up_prompt"),
-              "Could you explain one specific design choice or tradeoff in more detail?");
-    EXPECT_EQ(saved_record.at("follow_up_answer"),
-              "I would separate input collection from summary formatting.");
+    EXPECT_EQ(saved_record.at("follow_up_prompt"), "能不能再展开一个具体设计选择或取舍？");
+    EXPECT_EQ(saved_record.at("follow_up_answer"), "我会把输入收集和总结格式化分开。");
     EXPECT_EQ(saved_record.at("final_score").at("score"), 86);
 }
 
 // 报告数组顺序要和会话记录顺序一致，避免总结阶段出现题目和回答错位。
 TEST(InterviewReportTest, PreservesQuestionAnswerRecordOrder) {
     interview::session::DialogSession session;
-    session.addQuestionAnswerRecord(makeRecord("Question one", "Answer one", 70));
-    session.addQuestionAnswerRecord(makeRecord("Question two", "Answer two", 80));
-    session.addQuestionAnswerRecord(makeRecord("Question three", "Answer three", 90));
+    session.addQuestionAnswerRecord(makeRecord("问题一", "回答一", 70));
+    session.addQuestionAnswerRecord(makeRecord("问题二", "回答二", 80));
+    session.addQuestionAnswerRecord(makeRecord("问题三", "回答三", 90));
 
     const nlohmann::json report = interview::session::buildInterviewReportJson(session);
     const nlohmann::json& records = report.at("question_answer_records");
 
     ASSERT_EQ(records.size(), 3u);
-    EXPECT_EQ(records.at(0).at("question"), "Question one");
-    EXPECT_EQ(records.at(1).at("question"), "Question two");
-    EXPECT_EQ(records.at(2).at("question"), "Question three");
+    EXPECT_EQ(records.at(0).at("question"), "问题一");
+    EXPECT_EQ(records.at(1).at("question"), "问题二");
+    EXPECT_EQ(records.at(2).at("question"), "问题三");
 }
 
 // 序列化应该是只读操作，生成报告不能顺手修改 DialogSession 内部状态。
 TEST(InterviewReportTest, DoesNotModifyDialogSession) {
     interview::session::DialogSession session;
-    session.addQuestionAnswerRecord(makeRecord("Question one", "Answer one", 70));
+    session.addQuestionAnswerRecord(makeRecord("问题一", "回答一", 70));
 
     const std::size_t record_count_before = session.getQuestionAnswerRecordCount();
     const std::string first_question_before = session.getQuestionAnswerRecords().front().question;

@@ -13,28 +13,28 @@ namespace app {
 
 namespace {
 
-// 把内部状态枚举转换成 CLI 更容易读懂的英文标签。
+// 把内部状态枚举转换成 CLI 更容易读懂的中文标签，运行时不暴露内部枚举名。
 std::string interviewStateToString(session::InterviewState state) {
     switch (state) {
     case session::InterviewState::kConnecting:
-        return "Connecting";
+        return "连接中";
     case session::InterviewState::kInterviewerSpeaking:
-        return "InterviewerSpeaking";
+        return "面试官提问中";
     case session::InterviewState::kIdle:
-        return "Idle";
+        return "等待中";
     case session::InterviewState::kCandidateSpeaking:
-        return "CandidateSpeaking";
+        return "候选人回答中";
     case session::InterviewState::kInterviewerThinking:
-        return "InterviewerThinking";
+        return "面试官思考中";
     case session::InterviewState::kSessionEnding:
-        return "SessionEnding";
+        return "会话收尾中";
     case session::InterviewState::kCompleted:
-        return "Completed";
+        return "已完成";
     case session::InterviewState::kError:
-        return "Error";
+        return "错误";
     }
 
-    return "Unknown";
+    return "未知状态";
 }
 
 // 统一做状态切换并打印变化，便于测试和手动运行都观察同一条状态流。
@@ -42,7 +42,7 @@ void transitionState(session::DialogSession& interview_session, session::Intervi
                      std::ostream& output) {
     const session::InterviewState current_state = interview_session.getState();
     interview_session.setState(next_state);
-    output << "[State] " << interviewStateToString(current_state) << " -> "
+    output << "[状态] " << interviewStateToString(current_state) << " -> "
            << interviewStateToString(next_state) << '\n';
 }
 
@@ -52,19 +52,19 @@ void printSummary(std::size_t question_count, const session::DialogSession& inte
     const std::vector<session::QuestionAnswerRecord>& records =
         interview_session.getQuestionAnswerRecords();
 
-    output << "\n=== Interview Summary ===\n";
-    output << "Answered " << records.size() << " of " << question_count << " questions.\n";
+    output << "\n=== 面试总结 ===\n";
+    output << "已回答 " << records.size() << " / " << question_count << " 道题。\n";
 
     const std::size_t item_count = std::min(question_count, records.size());
     for (std::size_t index = 0; index < item_count; ++index) {
         const session::QuestionAnswerRecord& record = records[index];
-        output << index + 1 << ". Q: " << record.question << '\n';
-        output << "   A: " << record.candidate_answer << '\n';
+        output << index + 1 << ". 题目：" << record.question << '\n';
+        output << "   回答：" << record.candidate_answer << '\n';
         if (record.has_follow_up) {
-            output << "   Follow-up: " << record.follow_up_prompt << '\n';
-            output << "   Follow-up A: " << record.follow_up_answer << '\n';
+            output << "   追问：" << record.follow_up_prompt << '\n';
+            output << "   追问回答：" << record.follow_up_answer << '\n';
         }
-        output << "   Score: " << record.final_score.score << "/100 - "
+        output << "   得分：" << record.final_score.score << "/100 - "
                << record.final_score.feedback << '\n';
     }
 }
@@ -72,7 +72,7 @@ void printSummary(std::size_t question_count, const session::DialogSession& inte
 // 报告先直接打印成 JSON，后续再决定是否持久化到文件或接入 UI。
 void printReportJson(const session::DialogSession& interview_session, std::ostream& output) {
     const nlohmann::json report = session::buildInterviewReportJson(interview_session);
-    output << "\n=== Interview Report JSON ===\n";
+    output << "\n=== 面试报告 JSON ===\n";
     output << report.dump(2) << '\n';
 }
 
@@ -89,10 +89,10 @@ int runCliInterview(std::istream& input, std::ostream& output,
     session::InterviewManager& manager = prepared_interview.getManager();
 
     // 开场阶段：先打招呼，再把会话切回等待状态。
-    output << "=== AI Mock Interview CLI Demo ===\n";
+    output << "=== AI 模拟面试 CLI 演示 ===\n";
     transitionState(interview_session, session::InterviewState::kInterviewerSpeaking, output);
-    output << "Interviewer: Welcome, " << prepared_interview.getCandidateName() << ". ";
-    output << "This mock interview is for the " << prepared_interview.getTargetRole() << " role.\n";
+    output << "面试官：欢迎你，" << prepared_interview.getCandidateName() << "。";
+    output << "本次模拟面试岗位是 " << prepared_interview.getTargetRole() << "。\n";
     transitionState(interview_session, session::InterviewState::kIdle, output);
 
     std::size_t question_number = 1;
@@ -101,23 +101,23 @@ int runCliInterview(std::istream& input, std::ostream& output,
         const std::string* current_question = manager.getCurrentQuestion();
         if (current_question == nullptr) {
             transitionState(interview_session, session::InterviewState::kError, output);
-            output << "Interview stopped because no current question was found.\n";
+            output << "面试已停止：没有找到当前题目。\n";
             return 1;
         }
 
         // 面试官提问阶段。
         transitionState(interview_session, session::InterviewState::kInterviewerSpeaking, output);
-        output << "\nQuestion " << question_number << "/" << manager.getQuestionCount() << ": "
+        output << "\n问题 " << question_number << "/" << manager.getQuestionCount() << "："
                << *current_question << '\n';
 
         // 候选人输入阶段。
         transitionState(interview_session, session::InterviewState::kCandidateSpeaking, output);
-        output << "Your answer: ";
+        output << "你的回答：";
 
         std::string answer;
         if (!std::getline(input, answer)) {
             transitionState(interview_session, session::InterviewState::kError, output);
-            output << "\nInput ended unexpectedly.\n";
+            output << "\n输入提前结束。\n";
             return 1;
         }
 
@@ -125,12 +125,12 @@ int runCliInterview(std::istream& input, std::ostream& output,
         transitionState(interview_session, session::InterviewState::kInterviewerThinking, output);
         if (!manager.recordCandidateAnswer(interview_session, answer)) {
             transitionState(interview_session, session::InterviewState::kError, output);
-            output << "Interview stopped because the answer could not be recorded.\n";
+            output << "面试已停止：回答无法被记录。\n";
             return 1;
         }
 
         const services::LlmScoreResult score_result = manager.scoreCandidateAnswer(answer);
-        output << "Score: " << score_result.score << "/100 - " << score_result.feedback << '\n';
+        output << "得分：" << score_result.score << "/100 - " << score_result.feedback << '\n';
 
         std::string follow_up_answer;
         services::LlmScoreResult final_score_result = score_result;
@@ -139,21 +139,21 @@ int runCliInterview(std::istream& input, std::ostream& output,
         if (follow_up_decision.needs_follow_up) {
             transitionState(interview_session, session::InterviewState::kInterviewerSpeaking,
                             output);
-            output << "Follow-up: " << follow_up_decision.prompt << '\n';
+            output << "追问：" << follow_up_decision.prompt << '\n';
 
             transitionState(interview_session, session::InterviewState::kCandidateSpeaking, output);
-            output << "Your follow-up answer: ";
+            output << "你的追问回答：";
 
             if (!std::getline(input, follow_up_answer)) {
                 transitionState(interview_session, session::InterviewState::kError, output);
-                output << "\nInput ended unexpectedly.\n";
+                output << "\n输入提前结束。\n";
                 return 1;
             }
 
             transitionState(interview_session, session::InterviewState::kInterviewerThinking,
                             output);
             final_score_result = manager.scoreCandidateAnswer(answer + " " + follow_up_answer);
-            output << "Updated score: " << final_score_result.score << "/100 - "
+            output << "更新后得分：" << final_score_result.score << "/100 - "
                    << final_score_result.feedback << '\n';
         }
 
@@ -182,7 +182,7 @@ int runCliInterview(std::istream& input, std::ostream& output,
     printSummary(manager.getQuestionCount(), interview_session, output);
     printReportJson(interview_session, output);
     transitionState(interview_session, session::InterviewState::kCompleted, output);
-    output << "Interview completed.\n";
+    output << "面试完成。\n";
     return 0;
 }
 

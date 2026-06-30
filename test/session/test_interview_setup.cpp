@@ -70,8 +70,7 @@ TEST(InterviewSetupTest, ReturnsFailureWhenQuestionGenerationProducesNoQuestions
         interview::session::prepareInterview(makeInterviewConfig(0), llm_client);
 
     EXPECT_FALSE(prepared_interview.isReady());
-    EXPECT_EQ(prepared_interview.getErrorMessage(),
-              "Failed to start interview because no questions were generated.");
+    EXPECT_EQ(prepared_interview.getErrorMessage(), "面试启动失败：没有生成任何问题。");
     EXPECT_EQ(prepared_interview.getCandidateName(), "Test Candidate");
     EXPECT_EQ(prepared_interview.getTargetRole(), "C++ Intern");
 }

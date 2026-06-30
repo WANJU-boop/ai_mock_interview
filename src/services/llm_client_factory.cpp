@@ -20,7 +20,7 @@ std::unique_ptr<ILlmClient> createLlmClient(const common::LlmConfig& config) {
     }
 
     // 不支持的 provider 直接在服务层返回清晰错误，避免 main 拼装分支判断。
-    throw std::runtime_error("Unsupported LLM provider: " + config.provider);
+    throw std::runtime_error("不支持的 LLM provider：" + config.provider);
 }
 
 } // namespace services

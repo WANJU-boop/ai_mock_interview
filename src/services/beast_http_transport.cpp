@@ -44,13 +44,13 @@ ParsedHttpsUrl parseHttpsUrl(const std::string& url) {
     static const std::string kHttpsPrefix = "https://";
     if (!startsWith(url, kHttpsPrefix)) {
         // 真实 LLM API 传输必须走 HTTPS，避免把鉴权 header 和候选人回答明文发出去。
-        throw std::runtime_error("BeastHttpTransport requires an https URL");
+        throw std::runtime_error("BeastHttpTransport 要求 URL 必须使用 https");
     }
 
     // substr 从 https:// 后面开始截取，得到 host[:port]/path 这一段。
     const std::string remainder = url.substr(kHttpsPrefix.size());
     if (remainder.empty()) {
-        throw std::runtime_error("HTTPS URL must contain a host");
+        throw std::runtime_error("HTTPS URL 必须包含 host");
     }
 
     // authority 是 URL 里的“主机和可选端口”部分（主机名host和端口port）；target 是真正发送给 HTTP
@@ -59,7 +59,7 @@ ParsedHttpsUrl parseHttpsUrl(const std::string& url) {
     const std::string authority =
         path_pos == std::string::npos ? remainder : remainder.substr(0, path_pos);
     if (authority.empty()) {
-        throw std::runtime_error("HTTPS URL must contain a host");
+        throw std::runtime_error("HTTPS URL 必须包含 host");
     }
 
     ParsedHttpsUrl parsed_url; // 解析后的url 包括 host port target
@@ -75,7 +75,7 @@ ParsedHttpsUrl parseHttpsUrl(const std::string& url) {
     parsed_url.host = authority.substr(0, colon_pos);
     parsed_url.port = authority.substr(colon_pos + 1);
     if (parsed_url.host.empty() || parsed_url.port.empty()) {
-        throw std::runtime_error("HTTPS URL host or port must not be empty");
+        throw std::runtime_error("HTTPS URL 的 host 或 port 不能为空");
     }
 
     return parsed_url;
@@ -86,7 +86,7 @@ void setSniHostname(boost::beast::ssl_stream<boost::beast::tcp_stream>& stream,
     // TLS SNI（Server Name Indication）会在握手时告诉服务器“我要访问哪个域名”。
     // 许多云服务共用同一个 IP，如果不设置 SNI，服务器可能返回不匹配的默认证书。
     if (::SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()) != 1) {
-        throw std::runtime_error("Failed to set TLS server name indication");
+        throw std::runtime_error("设置 TLS SNI 失败");
     }
 }
 

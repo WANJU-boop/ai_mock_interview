@@ -128,7 +128,7 @@ TEST(InterviewManagerTest, ScoresEmptyAnswerAsZero) {
         context.manager.scoreCandidateAnswer("");
 
     EXPECT_EQ(score_result.score, 0);
-    EXPECT_EQ(score_result.feedback, "No answer provided.");
+    EXPECT_EQ(score_result.feedback, "未提供回答。");
 }
 
 // 如果当前已经没有题目，评分函数应返回明确错误，而不是继续调用服务层。
@@ -140,7 +140,7 @@ TEST(InterviewManagerTest, ReturnsExplicitFailureWhenScoringWithoutActiveQuestio
         context.manager.scoreCandidateAnswer("This answer should not be scored.");
 
     EXPECT_EQ(score_result.score, 0);
-    EXPECT_EQ(score_result.feedback, "No active question available.");
+    EXPECT_EQ(score_result.feedback, "没有可评分的当前题目。");
 }
 
 // 很短的回答应明显低于包含技术细节的完整回答。
@@ -155,9 +155,9 @@ TEST(InterviewManagerTest, ScoresShortAnswerLowerThanDetailedAnswer) {
                                              "ownership, debugging, and testing in real code.");
 
     EXPECT_LT(short_result.score, detailed_result.score);
-    EXPECT_EQ(short_result.feedback, "Answer is too short. Add more detail.");
+    EXPECT_EQ(short_result.feedback, "回答太短，建议补充更多细节。");
     EXPECT_GE(detailed_result.score, 90);
-    EXPECT_EQ(detailed_result.feedback, "Strong answer with concrete detail.");
+    EXPECT_EQ(detailed_result.feedback, "回答扎实，包含具体细节。");
 }
 
 // 中等质量回答应落在“还不错，但最好补例子”的中间档位。
@@ -169,7 +169,7 @@ TEST(InterviewManagerTest, ScoresMediumAnswerAsNeedsMoreExample) {
 
     EXPECT_GE(score_result.score, 65);
     EXPECT_LT(score_result.score, 85);
-    EXPECT_EQ(score_result.feedback, "Good answer, but add one concrete example.");
+    EXPECT_EQ(score_result.feedback, "回答不错，但建议补充一个具体例子。");
 }
 
 // 中间分数段需要触发追问，帮助候选人补充例子或细节。
@@ -177,11 +177,10 @@ TEST(InterviewManagerTest, RequestsFollowUpForScoresBetweenSeventyAndEightyNine)
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({75, "Good answer, but add one concrete example."});
+        context.manager.decideFollowUp({75, "回答不错，但建议补充一个具体例子。"});
 
     EXPECT_TRUE(follow_up.needs_follow_up);
-    EXPECT_EQ(follow_up.prompt,
-              "Could you give one concrete example from your project or practice?");
+    EXPECT_EQ(follow_up.prompt, "能不能补充一个来自项目或练习的具体例子？");
 }
 
 // 70 分是追问区间的下边界，需要锁住边界行为，防止条件改动导致回归。
@@ -189,7 +188,7 @@ TEST(InterviewManagerTest, RequestsFollowUpAtSeventy) {
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({70, "Good answer, but add one concrete example."});
+        context.manager.decideFollowUp({70, "回答不错，但建议补充一个具体例子。"});
 
     EXPECT_TRUE(follow_up.needs_follow_up);
 }
@@ -199,21 +198,20 @@ TEST(InterviewManagerTest, RequestsFollowUpAtEightyNine) {
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({89, "Good answer, but add one concrete example."});
+        context.manager.decideFollowUp({89, "回答扎实，包含具体细节。"});
 
     EXPECT_TRUE(follow_up.needs_follow_up);
 }
 
-// 追问不只用来要例子；当反馈不是 example 文案时，应走“补设计细节”分支。
-TEST(InterviewManagerTest, RequestsDetailFollowUpWhenFeedbackIsNotExamplePrompt) {
+// 追问不只用来要例子；较高但未到直接通过的分数，应走“补设计细节”分支。
+TEST(InterviewManagerTest, RequestsDetailFollowUpForHighButIncompleteScore) {
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({80, "Basic answer, but it needs more detail."});
+        context.manager.decideFollowUp({86, "回答扎实，包含具体细节。"});
 
     EXPECT_TRUE(follow_up.needs_follow_up);
-    EXPECT_EQ(follow_up.prompt,
-              "Could you explain one specific design choice or tradeoff in more detail?");
+    EXPECT_EQ(follow_up.prompt, "能不能再展开一个具体设计选择或取舍？");
 }
 
 // 高分回答直接进入下一题，不应再追加追问。
@@ -221,7 +219,7 @@ TEST(InterviewManagerTest, DoesNotRequestFollowUpForNinetyOrAbove) {
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({90, "Strong answer with concrete detail."});
+        context.manager.decideFollowUp({90, "回答扎实，包含具体细节。"});
 
     EXPECT_FALSE(follow_up.needs_follow_up);
     EXPECT_TRUE(follow_up.prompt.empty());
@@ -232,7 +230,7 @@ TEST(InterviewManagerTest, DoesNotRequestFollowUpBelowSeventy) {
     TestInterviewManagerContext context(std::vector<std::string>{"Only question"});
 
     const interview::session::FollowUpDecision follow_up =
-        context.manager.decideFollowUp({69, "Basic answer, but it needs more detail."});
+        context.manager.decideFollowUp({69, "回答有基本思路，但还需要更多细节。"});
 
     EXPECT_FALSE(follow_up.needs_follow_up);
     EXPECT_TRUE(follow_up.prompt.empty());

@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-
 #include "session/dialog_session.h"
+
+#include <gtest/gtest.h>
 
 // 新建会话时应处于连接状态，且还没有进入结束态。
 TEST(DialogSessionTest, StartsWithConnectingState) {
@@ -76,26 +76,26 @@ TEST(DialogSessionTest, StartsWithEmptyScoreResultHistory) {
 TEST(DialogSessionTest, CanStoreSingleScoreResult) {
     interview::session::DialogSession session;
 
-    session.addScoreResult(82, "Good answer, but add one concrete example.");
+    session.addScoreResult(82, "回答不错，但建议补充一个具体例子。");
 
     ASSERT_EQ(session.getScoreResultCount(), 1u);
     ASSERT_EQ(session.getScoreResults().size(), 1u);
     EXPECT_EQ(session.getScoreResults().front().score, 82);
-    EXPECT_EQ(session.getScoreResults().front().feedback, "Good answer, but add one concrete example.");
+    EXPECT_EQ(session.getScoreResults().front().feedback, "回答不错，但建议补充一个具体例子。");
 }
 
 // 多条评分结果需要保持追加顺序，确保和题目、回答逐题对齐。
 TEST(DialogSessionTest, PreservesScoreResultOrder) {
     interview::session::DialogSession session;
 
-    session.addScoreResult(55, "Basic answer, but it needs more detail.");
-    session.addScoreResult(90, "Strong answer with concrete detail.");
+    session.addScoreResult(55, "回答有基本思路，但还需要更多细节。");
+    session.addScoreResult(90, "回答扎实，包含具体细节。");
 
     ASSERT_EQ(session.getScoreResultCount(), 2u);
     EXPECT_EQ(session.getScoreResults()[0].score, 55);
-    EXPECT_EQ(session.getScoreResults()[0].feedback, "Basic answer, but it needs more detail.");
+    EXPECT_EQ(session.getScoreResults()[0].feedback, "回答有基本思路，但还需要更多细节。");
     EXPECT_EQ(session.getScoreResults()[1].score, 90);
-    EXPECT_EQ(session.getScoreResults()[1].feedback, "Strong answer with concrete detail.");
+    EXPECT_EQ(session.getScoreResults()[1].feedback, "回答扎实，包含具体细节。");
 }
 
 // 新会话不应预先带有完整问答记录。
@@ -111,21 +111,22 @@ TEST(DialogSessionTest, CanStoreQuestionAnswerRecordWithoutFollowUp) {
     interview::session::DialogSession session;
 
     interview::session::QuestionAnswerRecord record;
-    record.question = "What is one C++ concept you are learning?";
-    record.candidate_answer = "I am learning class design with a small project.";
-    record.final_score = {92, "Strong answer with concrete detail."};
+    record.question = "你最近在学习哪个 C++ 概念？";
+    record.candidate_answer = "我在一个小项目里练习类设计。";
+    record.final_score = {92, "回答扎实，包含具体细节。"};
 
     session.addQuestionAnswerRecord(record);
 
     ASSERT_EQ(session.getQuestionAnswerRecordCount(), 1u);
-    const interview::session::QuestionAnswerRecord& saved_record = session.getQuestionAnswerRecords().front();
-    EXPECT_EQ(saved_record.question, "What is one C++ concept you are learning?");
-    EXPECT_EQ(saved_record.candidate_answer, "I am learning class design with a small project.");
+    const interview::session::QuestionAnswerRecord& saved_record =
+        session.getQuestionAnswerRecords().front();
+    EXPECT_EQ(saved_record.question, "你最近在学习哪个 C++ 概念？");
+    EXPECT_EQ(saved_record.candidate_answer, "我在一个小项目里练习类设计。");
     EXPECT_FALSE(saved_record.has_follow_up);
     EXPECT_TRUE(saved_record.follow_up_prompt.empty());
     EXPECT_TRUE(saved_record.follow_up_answer.empty());
     EXPECT_EQ(saved_record.final_score.score, 92);
-    EXPECT_EQ(saved_record.final_score.feedback, "Strong answer with concrete detail.");
+    EXPECT_EQ(saved_record.final_score.feedback, "回答扎实，包含具体细节。");
 }
 
 // 需要追问时，完整记录要把追问提示和追问回答分开保存。
@@ -133,23 +134,23 @@ TEST(DialogSessionTest, CanStoreQuestionAnswerRecordWithFollowUp) {
     interview::session::DialogSession session;
 
     interview::session::QuestionAnswerRecord record;
-    record.question = "Which project detail would you improve next?";
-    record.candidate_answer = "I would improve the CLI flow.";
+    record.question = "你接下来想改进哪个项目细节？";
+    record.candidate_answer = "我想改进 CLI 流程。";
     record.has_follow_up = true;
-    record.follow_up_prompt = "Could you explain one specific design choice or tradeoff in more detail?";
-    record.follow_up_answer = "I would separate input collection from summary formatting.";
-    record.final_score = {86, "Strong answer with concrete detail."};
+    record.follow_up_prompt = "能不能再展开一个具体设计选择或取舍？";
+    record.follow_up_answer = "我会把输入收集和总结格式化分开。";
+    record.final_score = {86, "回答扎实，包含具体细节。"};
 
     session.addQuestionAnswerRecord(record);
 
     ASSERT_EQ(session.getQuestionAnswerRecordCount(), 1u);
-    const interview::session::QuestionAnswerRecord& saved_record = session.getQuestionAnswerRecords().front();
-    EXPECT_EQ(saved_record.question, "Which project detail would you improve next?");
-    EXPECT_EQ(saved_record.candidate_answer, "I would improve the CLI flow.");
+    const interview::session::QuestionAnswerRecord& saved_record =
+        session.getQuestionAnswerRecords().front();
+    EXPECT_EQ(saved_record.question, "你接下来想改进哪个项目细节？");
+    EXPECT_EQ(saved_record.candidate_answer, "我想改进 CLI 流程。");
     EXPECT_TRUE(saved_record.has_follow_up);
-    EXPECT_EQ(saved_record.follow_up_prompt,
-              "Could you explain one specific design choice or tradeoff in more detail?");
-    EXPECT_EQ(saved_record.follow_up_answer, "I would separate input collection from summary formatting.");
+    EXPECT_EQ(saved_record.follow_up_prompt, "能不能再展开一个具体设计选择或取舍？");
+    EXPECT_EQ(saved_record.follow_up_answer, "我会把输入收集和总结格式化分开。");
     EXPECT_EQ(saved_record.final_score.score, 86);
-    EXPECT_EQ(saved_record.final_score.feedback, "Strong answer with concrete detail.");
+    EXPECT_EQ(saved_record.final_score.feedback, "回答扎实，包含具体细节。");
 }

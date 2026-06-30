@@ -41,8 +41,7 @@ bool startsWith(const std::string& value, const std::string& prefix) {
 std::string requireApiKey(const common::LlmConfig& config) {
     const char* api_key = std::getenv(config.api_key_env.c_str());
     if (api_key == nullptr || std::string(api_key).empty()) {
-        throw std::runtime_error("Environment variable is not set for HTTP LLM API key: " +
-                                 config.api_key_env);
+        throw std::runtime_error("HTTP LLM API key 对应的环境变量未设置：" + config.api_key_env);
     }
 
     return api_key;
@@ -54,7 +53,7 @@ nlohmann::json parseJsonOrThrow(const std::string& text, const std::string& cont
     try {
         return nlohmann::json::parse(text);
     } catch (const nlohmann::json::parse_error& error) {
-        throw std::runtime_error("Failed to parse " + context + ": " + std::string(error.what()));
+        throw std::runtime_error("无法解析 " + context + "：" + std::string(error.what()));
     }
 }
 
@@ -62,7 +61,7 @@ nlohmann::json parseJsonOrThrow(const std::string& text, const std::string& cont
 // 这样上层能区分“模型返回格式错误”和“确实没有题目”。
 const nlohmann::json& requireArrayField(const nlohmann::json& object, const std::string& key) {
     if (!object.contains(key) || !object.at(key).is_array()) {
-        throw std::runtime_error("HTTP LLM response is missing array field: " + key);
+        throw std::runtime_error("HTTP LLM 响应缺少数组字段：" + key);
     }
 
     return object.at(key);
@@ -71,12 +70,12 @@ const nlohmann::json& requireArrayField(const nlohmann::json& object, const std:
 // 反馈文本和 message.content 都必须是非空字符串，否则报告和 CLI 会展示没有意义的空内容。
 std::string requireNonEmptyStringField(const nlohmann::json& object, const std::string& key) {
     if (!object.contains(key) || !object.at(key).is_string()) {
-        throw std::runtime_error("HTTP LLM response is missing string field: " + key);
+        throw std::runtime_error("HTTP LLM 响应缺少字符串字段：" + key);
     }
 
     const std::string value = object.at(key).get<std::string>();
     if (value.empty()) {
-        throw std::runtime_error("HTTP LLM response field must not be empty: " + key);
+        throw std::runtime_error("HTTP LLM 响应字段不能为空：" + key);
     }
 
     return value;
@@ -94,39 +93,38 @@ nlohmann::json extractStructuredPayload(const nlohmann::json& root) {
     // 真实 chat completions 响应至少要有一个 choice，且第一个 choice 必须是对象。
     const nlohmann::json& choices = requireArrayField(root, "choices");
     if (choices.empty() || !choices.front().is_object()) {
-        throw std::runtime_error("HTTP LLM response choices array must contain an object");
+        throw std::runtime_error("HTTP LLM 响应的 choices 数组必须包含对象");
     }
 
     // 当前 MVP 只读取第一条 choice；如果未来要支持多候选答案，可以在这里扩展策略。
     const nlohmann::json& first_choice = choices.front();
     if (!first_choice.contains("message") || !first_choice.at("message").is_object()) {
-        throw std::runtime_error("HTTP LLM response choice is missing message object");
+        throw std::runtime_error("HTTP LLM 响应的 choice 缺少 message 对象");
     }
 
     // response_format 要求模型返回 JSON，但在 chat completions 中它仍然包在 content 字符串里。
     const std::string content = requireNonEmptyStringField(first_choice.at("message"), "content");
-    return parseJsonOrThrow(content, "structured LLM content");
+    return parseJsonOrThrow(content, "结构化 LLM content");
 }
 
 // 把 HTTP 响应体转换成领域层需要的题目列表。
 // 所有格式校验都在这里完成，避免 CLI 或 InterviewManager 处理半合法数据。
 std::vector<std::string> parseQuestions(const std::string& response_body) {
     const nlohmann::json payload =
-        extractStructuredPayload(parseJsonOrThrow(response_body, "question generation response"));
+        extractStructuredPayload(parseJsonOrThrow(response_body, "题目生成响应"));
     const nlohmann::json& questions_json = requireArrayField(payload, "questions");
 
     std::vector<std::string> questions;
     questions.reserve(questions_json.size());
     for (const nlohmann::json& item : questions_json) {
         if (!item.is_string()) {
-            throw std::runtime_error("HTTP LLM response questions array must contain only strings");
+            throw std::runtime_error("HTTP LLM 响应的 questions 数组只能包含字符串");
         }
 
         const std::string question = item.get<std::string>();
         if (question.empty()) {
             // 空题目会让交互层打印空白问题，属于模型响应格式错误，必须尽早拒绝。
-            throw std::runtime_error(
-                "HTTP LLM response questions array must not contain empty strings");
+            throw std::runtime_error("HTTP LLM 响应的 questions 数组不能包含空字符串");
         }
         questions.push_back(question);
     }
@@ -138,14 +136,14 @@ std::vector<std::string> parseQuestions(const std::string& response_body) {
 // 分数范围在服务层锁定为 0..100，后续 UI 进度条和追问阈值就不需要重复防御。
 LlmScoreResult parseScoreResult(const std::string& response_body) {
     const nlohmann::json payload =
-        extractStructuredPayload(parseJsonOrThrow(response_body, "answer scoring response"));
+        extractStructuredPayload(parseJsonOrThrow(response_body, "回答评分响应"));
     if (!payload.contains("score") || !payload.at("score").is_number_integer()) {
-        throw std::runtime_error("HTTP LLM response is missing integer field: score");
+        throw std::runtime_error("HTTP LLM 响应缺少整数字段：score");
     }
 
     const int score = payload.at("score").get<int>();
     if (score < 0 || score > 100) {
-        throw std::runtime_error("HTTP LLM response score must be within 0 and 100");
+        throw std::runtime_error("HTTP LLM 响应的 score 必须在 0 到 100 之间");
     }
 
     const std::string feedback = requireNonEmptyStringField(payload, "feedback");
@@ -161,49 +159,50 @@ nlohmann::json buildQuestionRequestBody(const common::LlmConfig& config,
             {"response_format", {{"type", "json_object"}}},
             {"messages",
              {{{"role", "system"},
-               {"content", "You generate concise C++ mock interview questions. Return JSON only."}},
+               {"content", "你负责生成简洁的 C++ 模拟面试题。只返回 JSON，题目必须使用中文。"}},
               {{"role", "user"},
-               {"content", "Generate " + std::to_string(request.question_count) +
-                               " concise C++ interview questions for the role '" +
-                               request.target_role + "' for candidate '" + request.candidate_name +
-                               "'. Return JSON with a questions array of strings."}}}}};
+               {"content", "请为候选人 '" + request.candidate_name + "' 生成 " +
+                               std::to_string(request.question_count) + " 道面向 '" +
+                               request.target_role +
+                               "' 岗位的简洁中文 C++ 面试题。返回 JSON，格式为包含字符串数组 "
+                               "questions 的对象。"}}}}};
 }
 
 // 评分请求同样转换成结构化 JSON 输出。
 // 真实回答会进入请求体，但当前实现不会把请求体写进日志，避免泄露候选人回答。
 nlohmann::json buildScoreRequestBody(const common::LlmConfig& config,
                                      const AnswerScoringRequest& request) {
-    return {
-        {"model", config.model},
-        {"response_format", {{"type", "json_object"}}},
-        {"messages",
-         {{{"role", "system"}, {"content", "You score C++ interview answers. Return JSON only."}},
-          {{"role", "user"},
-           {"content",
-            "Question: " + request.question + "\nAnswer: " + request.candidate_answer +
-                "\nReturn JSON with integer score (0-100) and short feedback string."}}}}};
+    return {{"model", config.model},
+            {"response_format", {{"type", "json_object"}}},
+            {"messages",
+             {{{"role", "system"},
+               {"content", "你负责给 C++ 面试回答评分。只返回 JSON，feedback 必须使用中文。"}},
+              {{"role", "user"},
+               {"content",
+                "问题：" + request.question + "\n回答：" + request.candidate_answer +
+                    "\n请返回 JSON，包含整数 score (0-100) 和简短中文 feedback 字符串。"}}}}};
 }
 
 // HttpLlmClient 可能被测试直接构造，也可能由工厂创建。
 // 因此这里再次校验配置，不依赖上游一定已经调用 loadConfigFromFile。
 void validateHttpConfig(const common::LlmConfig& config) {
     if (config.provider != "http") {
-        throw std::runtime_error("HttpLlmClient requires llm.provider to be 'http'");
+        throw std::runtime_error("HttpLlmClient 要求 llm.provider 必须是 'http'");
     }
     if (config.model.empty()) {
-        throw std::runtime_error("HttpLlmClient requires non-empty llm.model");
+        throw std::runtime_error("HttpLlmClient 要求 llm.model 不能为空");
     }
     if (config.base_url.empty()) {
-        throw std::runtime_error("HttpLlmClient requires non-empty llm.base_url");
+        throw std::runtime_error("HttpLlmClient 要求 llm.base_url 不能为空");
     }
     if (!startsWith(config.base_url, "https://")) {
-        throw std::runtime_error("HttpLlmClient requires llm.base_url to start with https://");
+        throw std::runtime_error("HttpLlmClient 要求 llm.base_url 以 https:// 开头");
     }
     if (config.api_key_env.empty()) {
-        throw std::runtime_error("HttpLlmClient requires non-empty llm.api_key_env");
+        throw std::runtime_error("HttpLlmClient 要求 llm.api_key_env 不能为空");
     }
     if (config.timeout_ms <= 0) {
-        throw std::runtime_error("HttpLlmClient requires positive llm.timeout_ms");
+        throw std::runtime_error("HttpLlmClient 要求 llm.timeout_ms 必须是正数");
     }
 }
 
@@ -218,8 +217,7 @@ HttpResponse sendJsonRequest(const common::LlmConfig& config,
                              const std::string& request_body) {
     if (transport == nullptr) {
         // transport 是可测试边界，没有它就无法判断请求会发到哪里，因此构造或发送阶段都要拒绝。
-        throw std::runtime_error(
-            "HTTP transport is not configured yet for HttpLlmClient; inject a transport first");
+        throw std::runtime_error("HttpLlmClient 尚未配置 HTTP transport，请先注入 transport");
     }
 
     const std::string api_key = requireApiKey(config);
@@ -233,7 +231,7 @@ HttpResponse sendJsonRequest(const common::LlmConfig& config,
     // 这里依赖抽象接口而不是 Beast 具体类型，单元测试可以注入 FakeHttpTransport 离线断言请求内容。
     const HttpResponse response = transport->postJson(request);
     if (response.status_code < 200 || response.status_code >= 300) {
-        throw std::runtime_error("HTTP LLM request failed with status code: " +
+        throw std::runtime_error("HTTP LLM 请求失败，状态码：" +
                                  std::to_string(response.status_code));
     }
 
@@ -248,7 +246,7 @@ HttpLlmClient::HttpLlmClient(const common::LlmConfig& config,
     // 构造函数保证对象一旦创建成功就是可用状态，避免把半初始化 client 传给主流程。
     validateHttpConfig(config_);
     if (transport_ == nullptr) {
-        throw std::runtime_error("HttpLlmClient requires a non-null HTTP transport");
+        throw std::runtime_error("HttpLlmClient 要求 HTTP transport 不能为空");
     }
 }
 
