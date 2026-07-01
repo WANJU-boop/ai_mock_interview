@@ -58,6 +58,19 @@ TEST(MockLlmClientTest, IncludesTargetRoleInGeneratedQuestions) {
     EXPECT_NE(questions[1].find("Backend C++ Engineer"), std::string::npos);
 }
 
+// 验证简历上下文会影响 mock 出题方向，但题目不会直接复述简历摘要原文。
+TEST(MockLlmClientTest, UsesResumeContextForFirstQuestionWithoutLeakingRawContext) {
+    interview::services::MockLlmClient client;
+
+    const std::vector<std::string> questions = client.generateQuestions(
+        {"Demo Candidate", "Backend C++ Engineer", 2, "候选人做过内部日志系统和测试平台。"});
+
+    ASSERT_EQ(questions.size(), 2u);
+    EXPECT_NE(questions.front().find("简历"), std::string::npos);
+    EXPECT_NE(questions.front().find("Backend C++ Engineer"), std::string::npos);
+    EXPECT_EQ(questions.front().find("内部日志系统和测试平台"), std::string::npos);
+}
+
 // 目标岗位为空时仍要返回稳定题目，避免配置里缺少岗位名称时主流程直接中断。
 TEST(MockLlmClientTest, UsesFallbackRoleWhenTargetRoleEmpty) {
     interview::services::MockLlmClient client;

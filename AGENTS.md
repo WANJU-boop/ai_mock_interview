@@ -151,6 +151,8 @@ ctest --test-dir build --output-on-failure
 ## GitHub 提交流程
 
 - 分支命名：`codex/<short-topic>` 或 `learn/<short-topic>`。
+- Codex 一旦进入实现阶段（修改代码、文档、配置或测试前），必须先检查当前分支；如果当前在 `main`，先基于 `main` 新建 `codex/<short-topic>` 或 `learn/<short-topic>` 分支，再开始实现，禁止直接在 `main` 上完成实现提交。
+- 如果当前已经在非 `main` 分支，但该分支不属于本次任务，先切回 `main` 再新建本次任务分支，避免把无关改动混进同一个 MR。
 - 每次提交只包含一个学习目标或一个功能闭环。
 - 提交前查看 `git status --short`、`git diff --stat`、`git diff`。
 - Codex 生成的 commit message 默认使用中文，保留 Conventional Commits 类型前缀：

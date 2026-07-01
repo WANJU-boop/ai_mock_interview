@@ -98,12 +98,35 @@ TEST(ConfigTest, LoadsValidConfig) {
 
     EXPECT_EQ(config.interview.candidate_name, "Demo Candidate");
     EXPECT_EQ(config.interview.target_role, "C++ Intern");
+    EXPECT_TRUE(config.interview.resume_path.empty());
     EXPECT_EQ(config.interview.question_count, 3);
     EXPECT_EQ(config.llm.provider, "mock");
     EXPECT_EQ(config.llm.model, "mock-interviewer");
     EXPECT_TRUE(config.llm.base_url.empty());
     EXPECT_TRUE(config.llm.api_key_env.empty());
     EXPECT_EQ(config.llm.timeout_ms, 30000);
+}
+
+// 验证可选简历路径可以从配置进入 InterviewConfig，后续启动阶段再决定是否解析。
+TEST(ConfigTest, LoadsOptionalResumePath) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "resume_path_config_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "resume_path": "/tmp/demo_resume.pdf",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.interview.resume_path, "/tmp/demo_resume.pdf");
 }
 
 // 验证真实 HTTP provider 需要的字段可以被正常加载，后续 factory 和客户端可直接复用。
@@ -209,6 +232,26 @@ TEST(ConfigTest, ThrowsForWrongFieldType) {
                 "candidate_name": "Demo Candidate",
                 "target_role": "C++ Intern",
                 "question_count": "three"
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证 resume_path 虽然是可选字段，但一旦提供就必须是字符串，避免 PDF 边界拿到歧义输入。
+TEST(ConfigTest, ThrowsWhenResumePathHasWrongType) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "wrong_resume_path_type_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "resume_path": 123,
+                "question_count": 3
             },
             "llm": {
                 "provider": "mock",

@@ -8,6 +8,7 @@ add_executable(Project_test
     services/test_http_llm_client.cpp
     services/test_llm_client.cpp
     services/test_llm_client_factory.cpp
+    services/test_pdf_parser.cpp
     session/test_dialog_session.cpp
     session/test_interview_manager.cpp
     session/test_interview_report.cpp

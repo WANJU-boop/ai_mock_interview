@@ -2,6 +2,7 @@
 
 #include "common/config.h"
 #include "services/llm_client.h"
+#include "services/pdf_parser.h"
 #include "session/interview_manager.h"
 
 #include <memory>
@@ -45,9 +46,10 @@ class PreparedInterview {
     std::string error_message_;
 };
 
-// 由 interview 层统一负责“根据配置向 LLM 取题并准备会话”的启动逻辑。
+// 由 interview 层统一负责“根据配置解析简历、向 LLM 取题并准备会话”的启动逻辑。
 PreparedInterview prepareInterview(const common::InterviewConfig& config,
-                                   services::ILlmClient& llm_client);
+                                   services::ILlmClient& llm_client,
+                                   services::IPdfParser& pdf_parser);
 
 } // namespace session
 } // namespace interview

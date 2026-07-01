@@ -19,6 +19,7 @@ find_package(openssl CONFIG REQUIRED)
 find_package(boost_asio CONFIG REQUIRED)
 find_package(boost_beast CONFIG REQUIRED)
 find_package(boost_system CONFIG REQUIRED)
+find_package(podofo CONFIG REQUIRED)
 
 
 # =========================
@@ -50,6 +51,7 @@ add_library(services_lib
     src/services/http_llm_client.cpp
     src/services/llm_client.cpp
     src/services/llm_client_factory.cpp
+    src/services/pdf_parser.cpp
     src/services/services.cpp
 )
 
@@ -66,6 +68,7 @@ target_link_libraries(services_lib
         Boost::asio
         Boost::beast
         Boost::system
+        podofo::podofo
 )
 
 

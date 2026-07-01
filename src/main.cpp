@@ -2,6 +2,7 @@
 #include "common/config.h"
 #include "common/logger.h"
 #include "services/llm_client_factory.h"
+#include "services/pdf_parser.h"
 #include "session/interview_setup.h"
 
 #include <exception>
@@ -22,8 +23,10 @@ int main(int argc, char* argv[]) {
         // 入口层只负责组装依赖，具体 provider 解析逻辑收口到 services 层。
         std::unique_ptr<interview::services::ILlmClient> llm_client =
             interview::services::createLlmClient(config.llm);
+        // 生产入口使用真实 PoDoFo 解析器；测试仍通过 IPdfParser 注入 mock，避免依赖真实 PDF 文件。
+        interview::services::PodofoPdfParser pdf_parser;
         interview::session::PreparedInterview prepared_interview =
-            interview::session::prepareInterview(config.interview, *llm_client);
+            interview::session::prepareInterview(config.interview, *llm_client, pdf_parser);
         // main 只保留初始化和错误码返回，把可测试的主流程交给 app 层函数。
         return interview::app::runCliInterview(std::cin, std::cout, prepared_interview);
     } catch (const std::exception& error) {

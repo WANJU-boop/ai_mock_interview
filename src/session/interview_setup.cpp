@@ -1,5 +1,7 @@
 #include "session/interview_setup.h"
 
+#include <exception>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -37,11 +39,39 @@ InterviewManager& PreparedInterview::getManager() {
     return *manager_;
 }
 
+namespace {
+
+std::string loadResumeContext(const common::InterviewConfig& config,
+                              services::IPdfParser& pdf_parser) {
+    if (config.resume_path.empty()) {
+        return "";
+    }
+
+    // 简历解析属于外部服务边界，统一在启动阶段完成，避免 CLI 循环中混入文件解析细节。
+    return pdf_parser.parseResume({config.resume_path}).text;
+}
+
+} // namespace
+
 PreparedInterview prepareInterview(const common::InterviewConfig& config,
-                                   services::ILlmClient& llm_client) {
+                                   services::ILlmClient& llm_client,
+                                   services::IPdfParser& pdf_parser) {
+    std::string resume_context;
+    try {
+        resume_context = loadResumeContext(config, pdf_parser);
+    } catch (const std::exception& error) {
+        return {config.candidate_name, config.target_role,
+                "面试启动失败：简历解析失败：" + std::string(error.what())};
+    }
+
+    if (!config.resume_path.empty() && resume_context.empty()) {
+        return {config.candidate_name, config.target_role,
+                "面试启动失败：简历没有解析出可用文本。"};
+    }
+
     // 启动取题逻辑收口在 interview 层，避免 CLI 编排层直接依赖服务调用细节。
     std::vector<std::string> questions = llm_client.generateQuestions(
-        {config.candidate_name, config.target_role, config.question_count});
+        {config.candidate_name, config.target_role, config.question_count, resume_context});
     if (questions.empty()) {
         return {config.candidate_name, config.target_role, "面试启动失败：没有生成任何问题。"};
     }

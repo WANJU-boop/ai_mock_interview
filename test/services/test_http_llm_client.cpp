@@ -113,6 +113,23 @@ TEST(HttpLlmClientTest, BuildsQuestionRequestAndParsesStructuredQuestionResponse
     EXPECT_NE(transport->last_request.body.find("C++ Intern"), std::string::npos);
 }
 
+// 验证简历摘要会进入 HTTP 题目生成 prompt，同时仍然通过同一个 fake transport 离线测试。
+TEST(HttpLlmClientTest, IncludesResumeContextInQuestionRequestBody) {
+    ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"questions":["Resume based question"]})"};
+
+    interview::services::HttpLlmClient client(makeHttpConfig(), transport);
+
+    const std::vector<std::string> questions = client.generateQuestions(
+        {"Demo Candidate", "C++ Intern", 1, "候选人做过 C++ 日志系统，练习 RAII 和单元测试。"});
+
+    ASSERT_EQ(questions.size(), 1u);
+    EXPECT_NE(transport->last_request.body.find("简历上下文"), std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("不要原文复述"), std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("C++ 日志系统"), std::string::npos);
+}
+
 // 验证 base_url 带尾斜杠时仍只会追加一次 /chat/completions，避免真实请求地址重复拼接。
 TEST(HttpLlmClientTest, AppendsChatCompletionsToBaseUrlWithTrailingSlash) {
     ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");

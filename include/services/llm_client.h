@@ -14,6 +14,8 @@ struct QuestionGenerationRequest {
     std::string target_role;
     // 请求生成的问题数量；小于等于 0 时 mock 会返回空列表，调用方可明确处理无题状态。
     int question_count = 0;
+    // 可选简历摘要上下文，只用于定制题目，不应该被日志或报告完整输出。
+    std::string resume_context;
 };
 
 // 评分请求保留题目和候选人回答，后续真实 LLM 客户端可以基于同一接口替换 mock。

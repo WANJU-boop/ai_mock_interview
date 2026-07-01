@@ -154,18 +154,22 @@ LlmScoreResult parseScoreResult(const std::string& response_body) {
 // 这里故意要求 JSON object 输出，减少后续解析自由文本的不确定性。
 nlohmann::json buildQuestionRequestBody(const common::LlmConfig& config,
                                         const QuestionGenerationRequest& request) {
+    std::string prompt = "请为候选人 '" + request.candidate_name + "' 生成 " +
+                         std::to_string(request.question_count) + " 道面向 '" +
+                         request.target_role + "' 岗位的简洁中文 C++ 面试题。";
+    if (!request.resume_context.empty()) {
+        // 简历上下文只进入私有 prompt，不在日志中输出；要求模型不要把原文复述进题目。
+        prompt += "\n简历上下文（只用于定制题目，不要原文复述）：\n" + request.resume_context;
+    }
+    prompt += "\n返回 JSON，格式为包含字符串数组 questions 的对象。";
+
     // 先把输出约束成稳定 JSON，后续 UI、CLI 和测试都不用解析自由文本。
     return {{"model", config.model},
             {"response_format", {{"type", "json_object"}}},
             {"messages",
              {{{"role", "system"},
                {"content", "你负责生成简洁的 C++ 模拟面试题。只返回 JSON，题目必须使用中文。"}},
-              {{"role", "user"},
-               {"content", "请为候选人 '" + request.candidate_name + "' 生成 " +
-                               std::to_string(request.question_count) + " 道面向 '" +
-                               request.target_role +
-                               "' 岗位的简洁中文 C++ 面试题。返回 JSON，格式为包含字符串数组 "
-                               "questions 的对象。"}}}}};
+              {{"role", "user"}, {"content", prompt}}}}};
 }
 
 // 评分请求同样转换成结构化 JSON 输出。

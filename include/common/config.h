@@ -8,6 +8,8 @@ namespace common {
 struct InterviewConfig {
     std::string candidate_name;
     std::string target_role;
+    // 可选简历路径；为空时面试仍按岗位生成通用题目，不触发 PDF 解析边界。
+    std::string resume_path;
     int question_count = 0;
 };
 

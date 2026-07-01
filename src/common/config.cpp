@@ -167,6 +167,7 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
     AppConfig config;
     config.interview.candidate_name = requireString(interview, "candidate_name");
     config.interview.target_role = requireString(interview, "target_role");
+    config.interview.resume_path = readOptionalString(interview, "resume_path");
     config.interview.question_count = requirePositiveInt(interview, "question_count");
     config.llm.provider = requireString(llm, "provider");
     config.llm.model = requireString(llm, "model");

@@ -123,12 +123,21 @@ MockLlmClient::generateQuestions(const QuestionGenerationRequest& request) {
 
     const std::string target_role = normalizeTargetRole(request.target_role);
     // 固定题库让 mock 完全确定，单元测试不会受网络、随机数或系统时间影响。
-    const std::vector<std::string> question_bank = {
+    std::vector<std::string> question_bank;
+    if (!request.resume_context.empty()) {
+        // 简历上下文只影响题目方向，不把简历正文拼进题目，避免 CLI 和报告泄露原文。
+        question_bank.push_back("结合简历中的项目经历，请说明一个最能体现你适合“" + target_role +
+                                "”的 C++ 例子。");
+    }
+
+    const std::vector<std::string> default_question_bank = {
         "请先做一个简短自我介绍，并说明你为什么想面试“" + target_role + "”。",
         "最近你练习过哪个 C++ 概念？请结合“" + target_role + "”岗位说明。",
         "如果复盘一个项目决定，你会怎样改进它来准备“" + target_role + "”面试？",
         "准备“" + target_role + "”岗位时，你通常怎样定位和调试一个 C++ 问题？",
         "面向“" + target_role + "”岗位，你会怎样解释 C++ 的所有权和资源管理？"};
+    question_bank.insert(question_bank.end(), default_question_bank.begin(),
+                         default_question_bank.end());
 
     std::vector<std::string> questions;
     questions.reserve(static_cast<std::size_t>(request.question_count));

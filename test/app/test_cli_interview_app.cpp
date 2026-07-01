@@ -1,5 +1,6 @@
 #include "app/cli_interview_app.h"
 #include "services/llm_client.h"
+#include "services/pdf_parser.h"
 #include "session/interview_setup.h"
 
 #include <gtest/gtest.h>
@@ -18,6 +19,14 @@ interview::common::AppConfig makeTestConfig(int question_count) {
     return config;
 }
 
+interview::session::PreparedInterview
+prepareTestInterview(const interview::common::AppConfig& config,
+                     interview::services::ILlmClient& llm_client) {
+    interview::services::MockPdfParser pdf_parser;
+    // CLI 流程测试不依赖真实 PDF；这里显式注入 mock，保证启动链路和生产入口一致。
+    return interview::session::prepareInterview(config.interview, llm_client, pdf_parser);
+}
+
 } // namespace
 
 // 验证高质量回答可以走完整条 CLI 主流程，并在不追问的情况下输出总结和报告。
@@ -25,7 +34,7 @@ TEST(CliInterviewAppTest, CompletesInterviewWithoutFollowUpWhenAnswerIsStrong) {
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(1);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input(
         "我最近做了一个 C++ 日志项目，练习 RAII、所有权、测试、调试和设计取舍。"
         "我会说明为什么用接口隔离日志输出，如何用单元测试验证边界，"
@@ -49,7 +58,7 @@ TEST(CliInterviewAppTest, RequestsFollowUpAndStoresUpdatedScoreInReport) {
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(1);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input("我在练习 C++ 类和指针，能说明基本思路。\n"
                              "在日志项目练习里，我用 RAII 和测试管理所有权，并记录调试过程。\n");
     std::ostringstream output;
@@ -73,7 +82,7 @@ TEST(CliInterviewAppTest, ReturnsFailureWhenPreparedInterviewIsNotReady) {
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(0);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input("");
     std::ostringstream output;
 
@@ -88,7 +97,7 @@ TEST(CliInterviewAppTest, ReturnsFailureWhenPrimaryAnswerInputEndsUnexpectedly) 
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(1);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input("");
     std::ostringstream output;
 
@@ -107,7 +116,7 @@ TEST(CliInterviewAppTest, ReturnsFailureWhenFollowUpInputEndsUnexpectedly) {
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(1);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input("我在练习 C++ 类和指针，能说明基本思路。\n");
     std::ostringstream output;
 
@@ -128,7 +137,7 @@ TEST(CliInterviewAppTest, ProcessesMultipleQuestionsAndPrintsAccurateSummary) {
     interview::services::MockLlmClient llm_client;
     const interview::common::AppConfig config = makeTestConfig(2);
     interview::session::PreparedInterview prepared_interview =
-        interview::session::prepareInterview(config.interview, llm_client);
+        prepareTestInterview(config, llm_client);
     std::istringstream input(
         "我做过一个 C++ 日志项目，练习所有权、调试、测试和设计取舍，"
         "并能结合具体重构例子说明为什么这样设计。\n"
