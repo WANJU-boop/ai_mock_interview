@@ -28,6 +28,7 @@ find_package(podofo CONFIG REQUIRED)
 add_library(common_lib
     src/common/config.cpp
     src/common/logger.cpp
+    src/common/realtime_protocol.cpp
 )
 
 target_include_directories(common_lib
@@ -52,6 +53,7 @@ add_library(services_lib
     src/services/llm_client.cpp
     src/services/llm_client_factory.cpp
     src/services/pdf_parser.cpp
+    src/services/realtime_client.cpp
     src/services/services.cpp
 )
 
@@ -76,6 +78,7 @@ target_link_libraries(services_lib
 # SESSION 模块转成库
 # =========================
 add_library(session_lib
+    src/session/dialog_orchestrator.cpp
     src/session/dialog_session.cpp
     src/session/interview_manager.cpp
     src/session/interview_report.cpp
@@ -100,6 +103,7 @@ target_link_libraries(session_lib
 # =========================
 add_library(app_lib
     src/app/cli_interview_app.cpp
+    src/app/realtime_demo_app.cpp
 )
 
 target_include_directories(app_lib
@@ -110,6 +114,9 @@ target_include_directories(app_lib
 target_link_libraries(app_lib
     PUBLIC
         session_lib
+    PRIVATE
+        common_lib
+        services_lib
 )
 
 
@@ -121,6 +128,17 @@ add_executable(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
+    PRIVATE
+        app_lib
+        common_lib
+        services_lib
+)
+
+add_executable(${PROJECT_NAME}_realtime_demo
+    src/main_realtime_demo.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_realtime_demo
     PRIVATE
         app_lib
         common_lib

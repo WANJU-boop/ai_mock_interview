@@ -3,12 +3,16 @@ find_package(GTest CONFIG REQUIRED)
 
 add_executable(Project_test
     app/test_cli_interview_app.cpp
+    app/test_realtime_demo_app.cpp
     common/test_config.cpp
     common/test_logger.cpp
+    common/test_realtime_protocol.cpp
     services/test_http_llm_client.cpp
     services/test_llm_client.cpp
     services/test_llm_client_factory.cpp
     services/test_pdf_parser.cpp
+    services/test_realtime_client.cpp
+    session/test_dialog_orchestrator.cpp
     session/test_dialog_session.cpp
     session/test_interview_manager.cpp
     session/test_interview_report.cpp
