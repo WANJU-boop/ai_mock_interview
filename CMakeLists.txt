@@ -56,6 +56,7 @@ add_library(services_lib
     src/services/pdf_parser.cpp
     src/services/realtime_client.cpp
     src/services/services.cpp
+    src/services/volc_realtime_client_adapter.cpp
     src/services/volc_realtime_client.cpp
     src/services/volc_realtime_protocol.cpp
 )

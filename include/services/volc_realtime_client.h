@@ -58,6 +58,8 @@ class VolcRealtimeClient final {
     void connect();
     void startConnection();
     void startTextSession();
+    void sendSayHello(const std::string& content);
+    void sendChatTtsText(const std::string& content);
     void sendTextQuery(const std::string& content);
     VolcRealtimeFrame receiveFrame();
     std::vector<VolcRealtimeFrame> receiveUntilEvent(VolcRealtimeEventId event_id);

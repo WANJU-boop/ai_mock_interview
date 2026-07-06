@@ -67,6 +67,26 @@ void VolcRealtimeClient::startTextSession() {
     sendJsonEvent(VolcRealtimeEventId::kStartSession, buildStartSessionPayload(config_).dump());
 }
 
+void VolcRealtimeClient::sendSayHello(const std::string& content) {
+    if (content.empty()) {
+        throw std::runtime_error("SayHello 内容不能为空。");
+    }
+
+    sendJsonEvent(VolcRealtimeEventId::kSayHello, nlohmann::json{{"content", content}}.dump());
+}
+
+void VolcRealtimeClient::sendChatTtsText(const std::string& content) {
+    if (content.empty()) {
+        throw std::runtime_error("ChatTTSText 内容不能为空。");
+    }
+
+    // ChatTTSText 使用 start/end 两个包表达一次完整的客户端指定文本合成请求。
+    sendJsonEvent(VolcRealtimeEventId::kChatTtsText,
+                  nlohmann::json{{"start", true}, {"content", content}, {"end", false}}.dump());
+    sendJsonEvent(VolcRealtimeEventId::kChatTtsText,
+                  nlohmann::json{{"start", false}, {"content", ""}, {"end", true}}.dump());
+}
+
 void VolcRealtimeClient::sendTextQuery(const std::string& content) {
     if (content.empty()) {
         throw std::runtime_error("ChatTextQuery 内容不能为空。");
