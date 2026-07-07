@@ -9,12 +9,18 @@ namespace services {
 
 namespace {
 
+// 火山协议固定 4 字节基础 header：
+// byte0 = version + header size，byte1 = message type + flag，
+// byte2 = serialization + compression，byte3 当前保留。
+// 这些常量只属于火山协议层，业务层不应该依赖它们。
 constexpr std::uint8_t kProtocolVersion = 0x1;
 constexpr std::uint8_t kHeaderSizeInWords = 0x1;
 constexpr std::size_t kFixedHeaderSize = 4;
 constexpr std::uint8_t kNibbleMask = 0x0F;
 
 void appendInt32(std::vector<std::uint8_t>& bytes, std::int32_t value) {
+    // 火山协议里的 int32 使用网络字节序（big-endian，大端序）。
+    // C++ 机器本地可能是小端，所以不能直接把 int32 内存拷贝进 vector。
     const std::uint32_t raw = static_cast<std::uint32_t>(value);
     bytes.push_back(static_cast<std::uint8_t>((raw >> 24) & 0xFF));
     bytes.push_back(static_cast<std::uint8_t>((raw >> 16) & 0xFF));
@@ -23,6 +29,8 @@ void appendInt32(std::vector<std::uint8_t>& bytes, std::int32_t value) {
 }
 
 std::uint32_t readUint32(const std::vector<std::uint8_t>& bytes, std::size_t offset) {
+    // 解码时按大端序手动拼回 uint32，和 appendInt32 保持完全对称。
+    // 调用前必须先 ensureAvailable，否则 offset + 3 可能越界。
     return (static_cast<std::uint32_t>(bytes[offset]) << 24) |
            (static_cast<std::uint32_t>(bytes[offset + 1]) << 16) |
            (static_cast<std::uint32_t>(bytes[offset + 2]) << 8) |
@@ -35,6 +43,8 @@ std::int32_t readInt32(const std::vector<std::uint8_t>& bytes, std::size_t offse
 
 void ensureAvailable(const std::vector<std::uint8_t>& bytes, std::size_t offset,
                      std::size_t required_size, const char* field_name) {
+    // 所有读取前都经过这个边界检查，避免供应商返回坏包或测试构造坏包时读出 vector 范围。
+    // offset > size 也要单独判断，否则 size - offset 会发生无符号下溢。
     if (offset > bytes.size() || required_size > bytes.size() - offset) {
         throw std::invalid_argument(std::string(field_name) + " 超出火山 realtime frame 边界。");
     }
@@ -42,6 +52,8 @@ void ensureAvailable(const std::vector<std::uint8_t>& bytes, std::size_t offset,
 
 void appendSizedBytes(std::vector<std::uint8_t>& bytes, const std::vector<std::uint8_t>& payload,
                       const char* field_name) {
+    // 火山 optional 字符串和 payload 都采用“4 字节长度 + 数据”格式。
+    // 这里先检查长度能否放进 uint32，避免非常大的 vector 被截断成错误长度。
     if (payload.size() > std::numeric_limits<std::uint32_t>::max()) {
         throw std::invalid_argument(std::string(field_name) + " 太大，无法编码火山 frame。");
     }
@@ -52,6 +64,7 @@ void appendSizedBytes(std::vector<std::uint8_t>& bytes, const std::vector<std::u
 
 void appendSizedString(std::vector<std::uint8_t>& bytes, const std::string& value,
                        const char* field_name) {
+    // session_id 本质上也是一段 UTF-8/ASCII 字节；协议层只关心长度和字节，不关心语义。
     if (value.size() > std::numeric_limits<std::uint32_t>::max()) {
         throw std::invalid_argument(std::string(field_name) + " 太大，无法编码火山 frame。");
     }
@@ -61,6 +74,8 @@ void appendSizedString(std::vector<std::uint8_t>& bytes, const std::string& valu
 }
 
 VolcRealtimeMessageType decodeMessageType(std::uint8_t raw_value) {
+    // 显式 switch 的好处是：文档外的新类型不会静默落到某个默认值。
+    // 真实集成时一旦火山协议升级，测试或手动调试会尽早报错。
     switch (raw_value) {
     case static_cast<std::uint8_t>(VolcRealtimeMessageType::kFullClientRequest):
         return VolcRealtimeMessageType::kFullClientRequest;
@@ -119,6 +134,8 @@ VolcRealtimeCompression decodeCompression(std::uint8_t raw_value) {
 }
 
 VolcRealtimeEventId decodeEventId(std::int32_t raw_value) {
+    // 只允许当前项目已登记的 event id 进入后续流程。
+    // 新增火山事件时，应先补枚举、测试和 adapter 映射，再让它通过解码。
     switch (raw_value) {
     case static_cast<std::int32_t>(VolcRealtimeEventId::kStartConnection):
     case static_cast<std::int32_t>(VolcRealtimeEventId::kFinishConnection):
@@ -168,6 +185,8 @@ VolcRealtimeEventId decodeEventId(std::int32_t raw_value) {
 }
 
 bool flagHasSequence(VolcRealtimeMessageFlag flag) {
+    // 音频流式包会用 sequence 来标识流片段顺序；文本事件当前主要走 kEvent。
+    // 保留这个判断是为了后面接 TaskRequest/音频流时不用重写 frame 主结构。
     return flag == VolcRealtimeMessageFlag::kPositiveSequence ||
            flag == VolcRealtimeMessageFlag::kLastNegativeSequence;
 }
@@ -175,6 +194,8 @@ bool flagHasSequence(VolcRealtimeMessageFlag flag) {
 } // namespace
 
 bool isVolcRealtimeConnectEvent(VolcRealtimeEventId event_id) {
+    // Connection 级事件属于一条 WebSocket 连接本身，不属于某个 session，
+    // 所以编码时不会在 optional 区域写 session_id。
     return event_id == VolcRealtimeEventId::kStartConnection ||
            event_id == VolcRealtimeEventId::kFinishConnection ||
            event_id == VolcRealtimeEventId::kConnectionStarted ||
@@ -183,6 +204,8 @@ bool isVolcRealtimeConnectEvent(VolcRealtimeEventId event_id) {
 }
 
 bool isVolcRealtimeSessionEvent(VolcRealtimeEventId event_id) {
+    // 当前除 Connection 级事件外，其余事件都按 Session 级处理。
+    // 这样新增 Chat/TTS/ASR 事件时默认要求 session_id，更不容易漏掉会话归属。
     return !isVolcRealtimeConnectEvent(event_id);
 }
 
@@ -190,6 +213,8 @@ std::vector<std::uint8_t> encodeVolcRealtimeFrame(const VolcRealtimeFrame& frame
     std::vector<std::uint8_t> bytes;
     bytes.reserve(kFixedHeaderSize + frame.session_id.size() + frame.payload.size() + 16);
 
+    // 前 4 字节是固定 header。每个字节拆成高 4 bit 和低 4 bit，
+    // 所以这里用左移和掩码组合，而不是写多个独立字节。
     bytes.push_back(static_cast<std::uint8_t>((kProtocolVersion << 4) | kHeaderSizeInWords));
     bytes.push_back(
         static_cast<std::uint8_t>((static_cast<std::uint8_t>(frame.message_type) << 4) |
@@ -201,21 +226,27 @@ std::vector<std::uint8_t> encodeVolcRealtimeFrame(const VolcRealtimeFrame& frame
 
     if (frame.flag == VolcRealtimeMessageFlag::kError ||
         frame.message_type == VolcRealtimeMessageType::kErrorInformation) {
+        // 错误 frame 的 optional 区域是 error code，不是 event id。
+        // 这里强制要求 code，是为了避免上层误造出“看起来像错误但没有错误码”的包。
         if (!frame.code.has_value()) {
             throw std::invalid_argument("火山错误 frame 必须携带 code。");
         }
         appendInt32(bytes, *frame.code);
     } else if (flagHasSequence(frame.flag)) {
+        // sequence frame 的 optional 区域是流片段序号，后续音频流式传输会用到。
         if (!frame.sequence.has_value()) {
             throw std::invalid_argument("火山 sequence frame 必须携带 sequence。");
         }
         appendInt32(bytes, *frame.sequence);
     } else if (frame.flag == VolcRealtimeMessageFlag::kEvent) {
+        // 事件 frame 的 optional 区域先写 event id；如果是 Session 级事件，再写 session_id。
         if (!frame.event_id.has_value()) {
             throw std::invalid_argument("火山事件 frame 必须携带 event id。");
         }
         appendInt32(bytes, static_cast<std::int32_t>(*frame.event_id));
         if (isVolcRealtimeSessionEvent(*frame.event_id)) {
+            // StartConnection 不带 session_id，但 StartSession/ChatTextQuery 等必须带。
+            // 这个校验能在本地测试阶段拦住“服务端返回缺 session”这类低级问题。
             if (frame.session_id.empty()) {
                 throw std::invalid_argument("火山 Session 事件必须携带 session id。");
             }
@@ -228,11 +259,14 @@ std::vector<std::uint8_t> encodeVolcRealtimeFrame(const VolcRealtimeFrame& frame
 }
 
 VolcRealtimeFrame decodeVolcRealtimeFrame(const std::vector<std::uint8_t>& bytes) {
+    // 解码顺序必须和编码顺序一致：固定 header -> optional 区域 -> payload。
+    // 每一步都检查长度，避免坏包导致越界读取或把后续字段错位解析。
     ensureAvailable(bytes, 0, kFixedHeaderSize, "header");
 
     const std::uint8_t protocol_version = (bytes[0] >> 4) & kNibbleMask;
     const std::uint8_t header_size_words = bytes[0] & kNibbleMask;
     if (protocol_version != kProtocolVersion || header_size_words != kHeaderSizeInWords) {
+        // 目前只支持 4 字节基础 header。遇到不同版本先失败，后续再按文档补新版本解析。
         throw std::invalid_argument("不支持的火山 realtime header 版本或长度。");
     }
 
@@ -245,19 +279,24 @@ VolcRealtimeFrame decodeVolcRealtimeFrame(const std::vector<std::uint8_t>& bytes
     std::size_t offset = kFixedHeaderSize;
     if (frame.flag == VolcRealtimeMessageFlag::kError ||
         frame.message_type == VolcRealtimeMessageType::kErrorInformation) {
+        // 错误 frame：optional 区域固定读取 4 字节错误码。
         ensureAvailable(bytes, offset, 4, "error code");
         frame.code = readInt32(bytes, offset);
         offset += 4;
     } else if (flagHasSequence(frame.flag)) {
+        // sequence frame：optional 区域固定读取 4 字节序号。
         ensureAvailable(bytes, offset, 4, "sequence");
         frame.sequence = readInt32(bytes, offset);
         offset += 4;
     } else if (frame.flag == VolcRealtimeMessageFlag::kEvent) {
+        // 事件 frame：先读取 event id，再根据事件级别决定是否读取 session_id。
         ensureAvailable(bytes, offset, 4, "event id");
         frame.event_id = decodeEventId(readInt32(bytes, offset));
         offset += 4;
 
         if (isVolcRealtimeSessionEvent(*frame.event_id)) {
+            // session_id 本身也是“长度 + 字节”；不能直接读到 payload 前，
+            // 因为 payload 也可能是任意二进制，必须依赖长度字段切分。
             ensureAvailable(bytes, offset, 4, "session id size");
             const std::uint32_t session_id_size = readUint32(bytes, offset);
             offset += 4;
@@ -272,12 +311,14 @@ VolcRealtimeFrame decodeVolcRealtimeFrame(const std::vector<std::uint8_t>& bytes
     ensureAvailable(bytes, offset, 4, "payload size");
     const std::uint32_t payload_size = readUint32(bytes, offset);
     offset += 4;
+    // payload 不在协议层转成 string 或 JSON，是为了同时支持 Chat JSON 和 TTS 音频 bytes。
     ensureAvailable(bytes, offset, payload_size, "payload");
     frame.payload.assign(bytes.begin() + static_cast<std::ptrdiff_t>(offset),
                          bytes.begin() + static_cast<std::ptrdiff_t>(offset + payload_size));
     offset += payload_size;
 
     if (offset != bytes.size()) {
+        // 如果还有多余字节，说明长度字段或解析逻辑不一致。严格失败比忽略尾部更安全。
         throw std::invalid_argument("火山 realtime frame 包含未声明的多余字节。");
     }
 
@@ -285,6 +326,8 @@ VolcRealtimeFrame decodeVolcRealtimeFrame(const std::vector<std::uint8_t>& bytes
 }
 
 std::string volcRealtimeEventIdToKey(VolcRealtimeEventId event_id) {
+    // 日志和测试使用稳定字符串比直接打印数字更容易读。
+    // 未列出的合法事件仍返回 volc_event_<id>，避免日志完全丢失事件信息。
     switch (event_id) {
     case VolcRealtimeEventId::kStartConnection:
         return "start_connection";

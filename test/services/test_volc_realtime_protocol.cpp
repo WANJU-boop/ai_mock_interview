@@ -9,6 +9,8 @@
 namespace {
 
 std::vector<std::uint8_t> toBytes(const std::string& text) {
+    // 测试里手写 JSON 字符串，再按 UTF-8 字节放进协议 payload。
+    // 这样可以验证协议层不会破坏中文文本。
     return {text.begin(), text.end()};
 }
 
@@ -23,6 +25,8 @@ TEST(VolcRealtimeProtocolTest, EncodesStartSessionFrameWithSessionIdAndJsonPaylo
     frame.serialization = interview::services::VolcRealtimeSerialization::kJson;
     frame.event_id = interview::services::VolcRealtimeEventId::kStartSession;
     frame.session_id = "session-001";
+    // StartSession 是 Session 级事件，测试故意提供 session_id，确认编码器会写入 optional session
+    // 字段。
     frame.payload = toBytes(R"({"dialog":{"extra":{"input_mod":"text"}}})");
 
     const std::vector<std::uint8_t> encoded = interview::services::encodeVolcRealtimeFrame(frame);
@@ -118,6 +122,8 @@ TEST(VolcRealtimeProtocolTest, RejectsSessionEventWithoutSessionId) {
 // 验证未知事件 ID 会被拒绝，供应商协议变化时不会静默进入业务状态机。
 TEST(VolcRealtimeProtocolTest, RejectsUnknownEventId) {
     std::vector<std::uint8_t> frame = {
+        // 这个 fixture 手写二进制 frame，而不是调用 encode，目的是直接模拟“服务端发来未知 event
+        // id”。
         0x11, 0x94, 0x10, 0x00, // header: server JSON event
         0x00, 0x00, 0x27, 0x0F, // unknown event id 9999
         0x00, 0x00, 0x00, 0x02, // payload size
@@ -130,6 +136,8 @@ TEST(VolcRealtimeProtocolTest, RejectsUnknownEventId) {
 // 验证声明 payload 长度超过实际字节会失败，这类错误是 WebSocket 半包/封包错位的关键边界。
 TEST(VolcRealtimeProtocolTest, RejectsPayloadSizeLargerThanAvailableBytes) {
     std::vector<std::uint8_t> frame = {
+        // ConnectionStarted 是连接级事件，不带 session_id；payload size 故意写 5，但实际只有 2
+        // 字节。
         0x11, 0x94, 0x10, 0x00, 0x00, 0x00, 0x00, 0x32, // ConnectionStarted
         0x00, 0x00, 0x00, 0x05,                         // payload size declares 5 bytes
         '{',  '}',

@@ -12,11 +12,14 @@ namespace {
 class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtimeTransport {
   public:
     void connect(const interview::services::VolcRealtimeConnectionRequest& request) override {
+        // fake 不联网，只记录握手请求，测试就能检查 URL、header、timeout 是否正确。
         connected = true;
         last_request = request;
     }
 
     void sendBinary(const std::vector<std::uint8_t>& bytes) override {
+        // 模拟真实 transport 的基本状态约束：未连接或已关闭时不能发送。
+        // 这能防止测试误以为 client 可以跳过 connect 直接发包。
         if (!connected || closed) {
             throw std::runtime_error("fake transport is not connected");
         }
@@ -24,6 +27,8 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
     }
 
     std::vector<std::uint8_t> receiveBinary() override {
+        // incoming_frames 模拟服务端按顺序返回的 WebSocket binary message。
+        // 如果脚本耗尽还继续读，说明被测逻辑没有正确等到目标事件或缺少边界处理。
         if (incoming_frames.empty()) {
             throw std::out_of_range("no incoming frame");
         }
@@ -39,12 +44,16 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
 
     bool connected = false;
     bool closed = false;
+    // 最近一次 connect 请求，专门用于验证鉴权 header 是否由 client 正确构造。
     interview::services::VolcRealtimeConnectionRequest last_request;
+    // client 发出的每个二进制 frame 都保存在这里，测试再用协议层 decode 回来检查 event id/payload。
     std::vector<std::vector<std::uint8_t>> sent_frames;
+    // 预置服务端返回脚本，测试可以精确控制 ChatResponse、ChatEnded 等事件顺序。
     std::deque<std::vector<std::uint8_t>> incoming_frames;
 };
 
 interview::services::VolcRealtimeClientConfig makeConfig() {
+    // 使用假的 app/access key，保证单元测试不需要真实账号，也不会把密钥写进仓库。
     interview::services::VolcRealtimeClientConfig config;
     config.endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
     config.app_id = "test-app-id";
@@ -57,6 +66,7 @@ interview::services::VolcRealtimeClientConfig makeConfig() {
 
 std::string findHeaderValue(const std::vector<interview::services::VolcRealtimeHeader>& headers,
                             const std::string& name) {
+    // header 顺序不是业务重点，测试按名字查找，比依赖 vector 下标更稳定。
     for (const interview::services::VolcRealtimeHeader& header : headers) {
         if (header.name == name) {
             return header.value;
@@ -67,11 +77,14 @@ std::string findHeaderValue(const std::vector<interview::services::VolcRealtimeH
 }
 
 std::vector<std::uint8_t> toBytes(const std::string& text) {
+    // 服务端 JSON fixture 按字节放入 payload，和真实 WebSocket binary message 更接近。
     return {text.begin(), text.end()};
 }
 
 std::vector<std::uint8_t> makeServerEvent(interview::services::VolcRealtimeEventId event_id,
                                           const std::string& payload) {
+    // 构造“服务端发来的火山事件 frame”。测试 client 收包逻辑时，
+    // 不应该直接塞 VolcRealtimeFrame，而应该塞编码后的 bytes，覆盖真实解码路径。
     interview::services::VolcRealtimeFrame frame;
     frame.message_type = interview::services::VolcRealtimeMessageType::kFullServerResponse;
     frame.flag = interview::services::VolcRealtimeMessageFlag::kEvent;
@@ -139,9 +152,11 @@ TEST(VolcRealtimeClientTest, SendsTextQueryAndReceivesUntilChatEnded) {
     const std::shared_ptr<FakeVolcRealtimeTransport> transport =
         std::make_shared<FakeVolcRealtimeTransport>();
     transport->incoming_frames.push_back(
+        // 第一帧模拟服务端生成的文本回答。
         makeServerEvent(interview::services::VolcRealtimeEventId::kChatResponse,
                         R"({"content":"RAII 是资源获取即初始化。"})"));
     transport->incoming_frames.push_back(
+        // 第二帧模拟本轮 Chat 完成；receiveUntilChatEnded 应该在这里停止。
         makeServerEvent(interview::services::VolcRealtimeEventId::kChatEnded,
                         R"({"question_id":"q1","reply_id":"r1"})"));
     interview::services::VolcRealtimeClient client(makeConfig(), transport);
