@@ -7,6 +7,9 @@
 1. [项目整体概览](01_project_overview.md)
 2. [架构心智模型](02_architecture_mental_model.md)
 3. [Realtime 与 WebSocket 流程](03_realtime_websocket_flow.md)
+4. [项目术语表](04_glossary.md)
+5. [最重要的 5 个文件](05_key_files.md)
+6. [文字版模块依赖图](06_module_dependency_graph.md)
 
 ## 现有资料整理
 
@@ -34,6 +37,8 @@
 - [火山 Realtime 协议边界](../../development_records/2026-07-06_volc_realtime_protocol_boundary.md)
 - [火山 Realtime 文本模式客户端](../../development_records/2026-07-06_volc_realtime_text_client.md)
 - [火山 Realtime 适配到项目接口](../../development_records/2026-07-06_volc_realtime_adapter.md)
+- [代码解释文档目录整理](../../development_records/2026-07-08_code_explanation_docs_folder.md)
+- [术语表与依赖图整理](../../development_records/2026-07-08_glossary_and_dependency_docs.md)
 
 ## 维护约定
 
