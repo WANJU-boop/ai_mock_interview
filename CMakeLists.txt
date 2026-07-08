@@ -49,12 +49,17 @@ target_link_libraries(common_lib
 # =========================
 add_library(services_lib
     src/services/beast_http_transport.cpp
+    src/services/beast_volc_realtime_transport.cpp
     src/services/http_llm_client.cpp
     src/services/llm_client.cpp
     src/services/llm_client_factory.cpp
     src/services/pdf_parser.cpp
     src/services/realtime_client.cpp
+    src/services/realtime_client_factory.cpp
     src/services/services.cpp
+    src/services/volc_realtime_client_adapter.cpp
+    src/services/volc_realtime_client.cpp
+    src/services/volc_realtime_protocol.cpp
 )
 
 target_include_directories(services_lib
@@ -142,6 +147,15 @@ target_link_libraries(${PROJECT_NAME}_realtime_demo
     PRIVATE
         app_lib
         common_lib
+        services_lib
+)
+
+add_executable(${PROJECT_NAME}_volc_text_demo
+    src/main_volc_realtime_text_demo.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_volc_text_demo
+    PRIVATE
         services_lib
 )
 

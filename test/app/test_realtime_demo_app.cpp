@@ -47,7 +47,7 @@ TEST(RealtimeDemoAppTest, CompletesSingleQuestionAndPrintsReport) {
     const std::string rendered_output = output.str();
 
     EXPECT_EQ(exit_code, 0);
-    EXPECT_NE(rendered_output.find("=== Realtime Mock Demo ==="), std::string::npos);
+    EXPECT_NE(rendered_output.find("=== Realtime mock Demo ==="), std::string::npos);
     EXPECT_NE(rendered_output.find("面试官：问题 1/1："), std::string::npos);
     EXPECT_NE(rendered_output.find("\"question_count\": 1"), std::string::npos);
     EXPECT_NE(rendered_output.find("Realtime mock 面试完成。"), std::string::npos);
@@ -124,4 +124,20 @@ TEST(RealtimeDemoAppTest, ReturnsFailureWhenScriptEndsBeforeCompletion) {
     EXPECT_NE(rendered_output.find("Realtime demo 失败：realtime 事件流结束，但面试尚未完成。"),
               std::string::npos);
     EXPECT_EQ(rendered_output.find("=== Realtime Mock 报告 JSON ==="), std::string::npos);
+}
+
+// 验证真实 provider 的连接 smoke test 只检查 connect/send/close，不进入需要麦克风 transcript
+// 的面试循环。
+TEST(RealtimeDemoAppTest, RunsConnectionSmokeWithoutInterviewLoop) {
+    interview::services::MockRealtimeClient realtime_client({});
+    std::ostringstream output;
+
+    const int exit_code =
+        interview::app::runRealtimeConnectionSmoke(output, realtime_client, "mock");
+    const std::string rendered_output = output.str();
+
+    EXPECT_EQ(exit_code, 0);
+    EXPECT_NE(rendered_output.find("=== Realtime mock Connection Smoke ==="), std::string::npos);
+    EXPECT_NE(rendered_output.find("连接 smoke test 完成"), std::string::npos);
+    EXPECT_TRUE(realtime_client.isClosed());
 }

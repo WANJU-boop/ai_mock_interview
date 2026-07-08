@@ -11,5 +11,17 @@
     "base_url": "https://api.openai.com/v1",
     "api_key_env": "OPENAI_API_KEY",
     "timeout_ms": 30000
+  },
+  "realtime": {
+    "provider": "mock",
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/realtime/dialogue",
+    "app_id_env": "VOLC_APP_ID",
+    "access_key_env": "VOLC_ACCESS_KEY",
+    "resource_id": "volc.speech.dialog",
+    "app_key": "PlgvMymc7f3tQnJ6",
+    "model": "1.2.1.1",
+    "input_mod": "text",
+    "speaker": "zh_female_vv_jupiter_bigtts",
+    "timeout_ms": 30000
   }
 }
