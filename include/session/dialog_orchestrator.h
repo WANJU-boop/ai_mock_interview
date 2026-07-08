@@ -16,6 +16,8 @@ struct DialogOrchestratorResult {
     bool success = false;
     std::string error_message;
     DialogSession session;
+    // partial transcript 是实时识别的临时文本，只给 UI 展示，不参与评分和报告。
+    std::vector<std::string> partial_transcripts;
     std::vector<std::string> interviewer_messages;
 };
 

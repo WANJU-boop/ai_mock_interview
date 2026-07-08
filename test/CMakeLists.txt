@@ -12,6 +12,7 @@ add_executable(Project_test
     services/test_llm_client_factory.cpp
     services/test_pdf_parser.cpp
     services/test_realtime_client.cpp
+    services/test_realtime_client_factory.cpp
     services/test_volc_realtime_client_adapter.cpp
     services/test_volc_realtime_client.cpp
     services/test_volc_realtime_protocol.cpp

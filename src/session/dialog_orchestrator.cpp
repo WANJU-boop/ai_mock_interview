@@ -163,6 +163,9 @@ DialogOrchestratorResult DialogOrchestrator::run() {
     bool interview_started = false;
     std::size_t question_number = 1;
 
+    // 当前 orchestrator 仍是同步事件循环：mock 测试能确定性复现，
+    // 真实 WebSocket adapter 可以把 receiveNextEvent 实现成阻塞读取。
+    // 后续接 Qt 时，不应在 UI 线程直接调用 run()，而应放到 worker 线程并把事件派发回主线程。
     while (realtime_client_.hasNextEvent()) {
         const common::RealtimeEvent event = realtime_client_.receiveNextEvent();
         switch (event.type) {
@@ -193,6 +196,7 @@ DialogOrchestratorResult DialogOrchestrator::run() {
                 return result;
             }
             // partial transcript 只用于未来 UI 实时展示，不推进评分和题目状态。
+            result.partial_transcripts.push_back(event.text);
             transitionState(result.session, InterviewState::kCandidateSpeaking);
             break;
 

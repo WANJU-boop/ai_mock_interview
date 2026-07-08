@@ -58,6 +58,25 @@ std::string readOptionalString(const nlohmann::json& parent, const std::string& 
     return value.get<std::string>();
 }
 
+std::string readOptionalStringWithDefault(const nlohmann::json& parent, const std::string& key,
+                                          const std::string& default_value) {
+    if (!parent.contains(key)) {
+        return default_value;
+    }
+
+    const nlohmann::json& value = parent.at(key);
+    if (!value.is_string()) {
+        throw std::runtime_error("配置字段必须是字符串：" + key);
+    }
+
+    const std::string result = value.get<std::string>();
+    if (result.empty()) {
+        throw std::runtime_error("配置字段不能为空：" + key);
+    }
+
+    return result;
+}
+
 int requirePositiveInt(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
         throw std::runtime_error("配置缺少字段：" + key);
@@ -103,6 +122,36 @@ void validateLlmConfig(const AppConfig& config) {
     }
     if (config.llm.api_key_env.empty()) {
         throw std::runtime_error("HTTP provider 要求 llm.api_key_env 不能为空");
+    }
+}
+
+void validateRealtimeConfig(const AppConfig& config) {
+    if (config.realtime.provider == "mock") {
+        return;
+    }
+
+    if (config.realtime.provider != "volc") {
+        throw std::runtime_error("不支持的 realtime provider：" + config.realtime.provider);
+    }
+
+    // 真实 realtime provider 的安全边界在配置层先检查：
+    // 1. endpoint 必须是加密 WSS
+    // 2. 配置文件只保存环境变量名
+    // 3. 当前阶段只允许 text 模式，避免误以为音频链路已经完成。
+    if (config.realtime.endpoint.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.endpoint 不能为空");
+    }
+    if (!startsWith(config.realtime.endpoint, "wss://")) {
+        throw std::runtime_error("volc realtime 要求 realtime.endpoint 以 wss:// 开头");
+    }
+    if (config.realtime.app_id_env.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.app_id_env 不能为空");
+    }
+    if (config.realtime.access_key_env.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.access_key_env 不能为空");
+    }
+    if (config.realtime.input_mod != "text") {
+        throw std::runtime_error("当前阶段只支持 realtime.input_mod=text，audio 模式留到音频模块");
     }
 }
 
@@ -161,20 +210,45 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
         throw std::runtime_error("配置根节点必须是对象");
     }
 
+    AppConfig config;
+
     const nlohmann::json& interview = requireObject(root, "interview");
     const nlohmann::json& llm = requireObject(root, "llm");
-
-    AppConfig config;
     config.interview.candidate_name = requireString(interview, "candidate_name");
     config.interview.target_role = requireString(interview, "target_role");
     config.interview.resume_path = readOptionalString(interview, "resume_path");
     config.interview.question_count = requirePositiveInt(interview, "question_count");
+
     config.llm.provider = requireString(llm, "provider");
     config.llm.model = requireString(llm, "model");
     config.llm.base_url = readOptionalString(llm, "base_url");
     config.llm.api_key_env = readOptionalString(llm, "api_key_env");
     config.llm.timeout_ms = readPositiveIntWithDefault(llm, "timeout_ms", 30000);
+
+    if (root.contains("realtime")) {
+        const nlohmann::json& realtime = requireObject(root, "realtime");
+        config.realtime.provider = requireString(realtime, "provider");
+        config.realtime.endpoint =
+            readOptionalStringWithDefault(realtime, "endpoint", config.realtime.endpoint);
+        config.realtime.app_id_env =
+            readOptionalStringWithDefault(realtime, "app_id_env", config.realtime.app_id_env);
+        config.realtime.access_key_env = readOptionalStringWithDefault(
+            realtime, "access_key_env", config.realtime.access_key_env);
+        config.realtime.resource_id =
+            readOptionalStringWithDefault(realtime, "resource_id", config.realtime.resource_id);
+        config.realtime.app_key =
+            readOptionalStringWithDefault(realtime, "app_key", config.realtime.app_key);
+        config.realtime.model =
+            readOptionalStringWithDefault(realtime, "model", config.realtime.model);
+        config.realtime.input_mod =
+            readOptionalStringWithDefault(realtime, "input_mod", config.realtime.input_mod);
+        config.realtime.speaker =
+            readOptionalStringWithDefault(realtime, "speaker", config.realtime.speaker);
+        config.realtime.timeout_ms = readPositiveIntWithDefault(realtime, "timeout_ms", 30000);
+    }
+
     validateLlmConfig(config);
+    validateRealtimeConfig(config);
     return config;
 }
 

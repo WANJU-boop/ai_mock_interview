@@ -133,6 +133,8 @@ TEST(DialogOrchestratorTest, DoesNotAdvanceQuestionOnPartialTranscript) {
     const interview::session::DialogOrchestratorResult result = orchestrator.run();
 
     ASSERT_TRUE(result.success);
+    ASSERT_EQ(result.partial_transcripts.size(), 1u);
+    EXPECT_EQ(result.partial_transcripts.front(), "我还在组织语言");
     ASSERT_EQ(result.session.getQuestionAnswerRecordCount(), 1u);
     EXPECT_EQ(result.session.getQuestionAnswerRecords().front().candidate_answer, strongAnswer());
     EXPECT_EQ(result.session.getCandidateAnswerCount(), 1u);

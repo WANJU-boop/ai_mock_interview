@@ -105,6 +105,9 @@ TEST(ConfigTest, LoadsValidConfig) {
     EXPECT_TRUE(config.llm.base_url.empty());
     EXPECT_TRUE(config.llm.api_key_env.empty());
     EXPECT_EQ(config.llm.timeout_ms, 30000);
+    EXPECT_EQ(config.realtime.provider, "mock");
+    EXPECT_EQ(config.realtime.input_mod, "text");
+    EXPECT_EQ(config.realtime.timeout_ms, 30000);
 }
 
 // 验证可选简历路径可以从配置进入 InterviewConfig，后续启动阶段再决定是否解析。
@@ -155,6 +158,114 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
     EXPECT_EQ(config.llm.base_url, "https://api.openai.com/v1");
     EXPECT_EQ(config.llm.api_key_env, "OPENAI_API_KEY");
     EXPECT_EQ(config.llm.timeout_ms, 45000);
+}
+
+// 验证 realtime mock 配置可以显式写入，后续 demo 入口能通过统一配置选择离线事件脚本。
+TEST(ConfigTest, LoadsValidMockRealtimeConfig) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "valid_mock_realtime_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "mock"
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.realtime.provider, "mock");
+}
+
+// 验证火山 realtime 的连接参数可以从配置进入 RealtimeConfig，但真实密钥仍只保存环境变量名。
+TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "valid_volc_realtime_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "endpoint": "wss://example.com/realtime",
+                "app_id_env": "TEST_VOLC_APP_ID",
+                "access_key_env": "TEST_VOLC_ACCESS_KEY",
+                "resource_id": "volc.speech.dialog",
+                "app_key": "public-app-key",
+                "model": "1.2.1.1",
+                "input_mod": "text",
+                "speaker": "demo-speaker",
+                "timeout_ms": 45000
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.realtime.provider, "volc");
+    EXPECT_EQ(config.realtime.endpoint, "wss://example.com/realtime");
+    EXPECT_EQ(config.realtime.app_id_env, "TEST_VOLC_APP_ID");
+    EXPECT_EQ(config.realtime.access_key_env, "TEST_VOLC_ACCESS_KEY");
+    EXPECT_EQ(config.realtime.speaker, "demo-speaker");
+    EXPECT_EQ(config.realtime.timeout_ms, 45000);
+}
+
+// 验证真实 realtime provider 必须使用 WSS，避免把鉴权信息放到明文 WebSocket 里。
+TEST(ConfigTest, ThrowsWhenVolcRealtimeEndpointIsNotSecure) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_volc_realtime_endpoint_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "endpoint": "ws://example.com/realtime"
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证当前阶段不会误开 audio 模式；音频输入要等 PortAudio 边界完成后再接。
+TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_volc_audio_mode_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "input_mod": "audio"
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
 TEST(ConfigTest, ThrowsForMissingConfigSection) {
