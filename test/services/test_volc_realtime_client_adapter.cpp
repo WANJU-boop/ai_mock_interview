@@ -51,13 +51,25 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
     std::deque<std::vector<std::uint8_t>> incoming_frames;
 };
 
-interview::services::VolcRealtimeClientConfig makeConfig() {
+interview::services::VolcRealtimeRuntimeConfig makeConfig() {
     // fake 配置只要求字段完整，不需要真实火山账号。
-    interview::services::VolcRealtimeClientConfig config;
+    interview::services::VolcRealtimeRuntimeConfig config;
+    config.endpoint = "wss://example.com/realtime";
     config.app_id = "test-app-id";
     config.access_key = "test-access-key";
+    config.resource_id = "volc.speech.dialog";
+    config.app_key = "public-app-key";
     config.connect_id = "connect-001";
     config.session_id = "session-001";
+    config.model = "1.2.1.1";
+    config.input_mod = "text";
+    config.strict_audit = true;
+    config.enable_volc_websearch = false;
+    config.speaker = "test-speaker";
+    config.tts_audio_format = "pcm_s16le";
+    config.tts_sample_rate_hz = 24000;
+    config.tts_channels = 1;
+    config.timeout_ms = 12000;
     return config;
 }
 

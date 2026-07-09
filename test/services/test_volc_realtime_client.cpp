@@ -52,14 +52,25 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
     std::deque<std::vector<std::uint8_t>> incoming_frames;
 };
 
-interview::services::VolcRealtimeClientConfig makeConfig() {
+interview::services::VolcRealtimeRuntimeConfig makeConfig() {
     // 使用假的 app/access key，保证单元测试不需要真实账号，也不会把密钥写进仓库。
-    interview::services::VolcRealtimeClientConfig config;
+    // 运行时配置没有供应商默认值，测试必须显式写全字段，避免遗漏映射却被默认值掩盖。
+    interview::services::VolcRealtimeRuntimeConfig config;
     config.endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
     config.app_id = "test-app-id";
     config.access_key = "test-access-key";
+    config.resource_id = "volc.speech.dialog";
+    config.app_key = "PlgvMymc7f3tQnJ6";
     config.connect_id = "connect-001";
     config.session_id = "session-001";
+    config.model = "1.2.1.1";
+    config.input_mod = "text";
+    config.strict_audit = true;
+    config.enable_volc_websearch = false;
+    config.speaker = "zh_female_vv_jupiter_bigtts";
+    config.tts_audio_format = "pcm_s16le";
+    config.tts_sample_rate_hz = 24000;
+    config.tts_channels = 1;
     config.timeout_ms = 12000;
     return config;
 }
@@ -145,6 +156,8 @@ TEST(VolcRealtimeClientTest, SendsStartConnectionAndTextSessionEvents) {
     EXPECT_NE(payload.find(R"("input_mod":"text")"), std::string::npos);
     EXPECT_NE(payload.find(R"("model":"1.2.1.1")"), std::string::npos);
     EXPECT_NE(payload.find(R"("format":"pcm_s16le")"), std::string::npos);
+    EXPECT_NE(payload.find(R"("sample_rate":24000)"), std::string::npos);
+    EXPECT_NE(payload.find(R"("strict_audit":true)"), std::string::npos);
 }
 
 // 验证文本 query 会发送 ChatTextQuery，并读取到 ChatEnded 为止，形成文本模式的最小收发闭环。
@@ -200,7 +213,7 @@ TEST(VolcRealtimeClientTest, SendsFinishEventsAndClosesTransport) {
 
 // 验证配置缺少 access key 时构造阶段直接失败，避免真实连接阶段才暴露模糊鉴权错误。
 TEST(VolcRealtimeClientTest, ThrowsWhenRequiredConfigIsMissing) {
-    interview::services::VolcRealtimeClientConfig config = makeConfig();
+    interview::services::VolcRealtimeRuntimeConfig config = makeConfig();
     config.access_key.clear();
 
     EXPECT_THROW(interview::services::VolcRealtimeClient(

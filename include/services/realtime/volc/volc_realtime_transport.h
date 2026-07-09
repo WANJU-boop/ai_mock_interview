@@ -22,7 +22,8 @@ struct VolcRealtimeConnectionRequest {
     // 鉴权和追踪 header。不要在日志里打印完整 header，里面包含 access key。
     std::vector<VolcRealtimeHeader> headers;
     // 同步 WebSocket 操作的超时时间，防止手动集成 demo 永久卡住。
-    int timeout_ms = 30000;
+    // 请求对象不提供供应商默认值，调用方必须从已解析配置显式写入。
+    int timeout_ms = 0;
 };
 
 // WebSocket 传输抽象用于隔离真实网络；单元测试通过 fake transport 验证发包顺序和内容。

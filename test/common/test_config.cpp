@@ -109,8 +109,9 @@ TEST(ConfigTest, LoadsValidConfig) {
     EXPECT_TRUE(config.llm.api_key_env.empty());
     EXPECT_EQ(config.llm.timeout_ms, 30000);
     EXPECT_EQ(config.realtime.provider, "mock");
-    EXPECT_EQ(config.realtime.input_mod, "text");
-    EXPECT_EQ(config.realtime.timeout_ms, 30000);
+    EXPECT_EQ(config.realtime.dialog.input_mod, "text");
+    EXPECT_EQ(config.realtime.connection.timeout_ms, 30000);
+    EXPECT_EQ(config.realtime.tts.sample_rate_hz, 24000);
 }
 
 // 验证可选简历路径可以从配置进入 InterviewConfig，后续启动阶段再决定是否解析。
@@ -203,26 +204,41 @@ TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
             },
             "realtime": {
                 "provider": "volc",
-                "endpoint": "wss://example.com/realtime",
-                "app_id_env": "TEST_VOLC_APP_ID",
-                "access_key_env": "TEST_VOLC_ACCESS_KEY",
-                "resource_id": "volc.speech.dialog",
-                "app_key": "public-app-key",
-                "model": "1.2.1.1",
-                "input_mod": "text",
-                "speaker": "demo-speaker",
-                "timeout_ms": 45000
+                "connection": {
+                    "endpoint": "wss://example.com/realtime",
+                    "app_id_env": "TEST_VOLC_APP_ID",
+                    "access_key_env": "TEST_VOLC_ACCESS_KEY",
+                    "resource_id": "volc.speech.dialog",
+                    "app_key": "public-app-key",
+                    "timeout_ms": 45000
+                },
+                "dialog": {
+                    "model": "1.2.1.1",
+                    "input_mod": "text",
+                    "strict_audit": false,
+                    "enable_volc_websearch": true
+                },
+                "tts": {
+                    "speaker": "demo-speaker",
+                    "audio_format": "pcm_s16le",
+                    "sample_rate_hz": 16000,
+                    "channels": 2
+                }
             }
         })");
 
     const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
 
     EXPECT_EQ(config.realtime.provider, "volc");
-    EXPECT_EQ(config.realtime.endpoint, "wss://example.com/realtime");
-    EXPECT_EQ(config.realtime.app_id_env, "TEST_VOLC_APP_ID");
-    EXPECT_EQ(config.realtime.access_key_env, "TEST_VOLC_ACCESS_KEY");
-    EXPECT_EQ(config.realtime.speaker, "demo-speaker");
-    EXPECT_EQ(config.realtime.timeout_ms, 45000);
+    EXPECT_EQ(config.realtime.connection.endpoint, "wss://example.com/realtime");
+    EXPECT_EQ(config.realtime.connection.app_id_env, "TEST_VOLC_APP_ID");
+    EXPECT_EQ(config.realtime.connection.access_key_env, "TEST_VOLC_ACCESS_KEY");
+    EXPECT_EQ(config.realtime.connection.timeout_ms, 45000);
+    EXPECT_FALSE(config.realtime.dialog.strict_audit);
+    EXPECT_TRUE(config.realtime.dialog.enable_volc_websearch);
+    EXPECT_EQ(config.realtime.tts.speaker, "demo-speaker");
+    EXPECT_EQ(config.realtime.tts.sample_rate_hz, 16000);
+    EXPECT_EQ(config.realtime.tts.channels, 2);
 }
 
 // 验证真实 realtime provider 必须使用 WSS，避免把鉴权信息放到明文 WebSocket 里。
@@ -241,7 +257,9 @@ TEST(ConfigTest, ThrowsWhenVolcRealtimeEndpointIsNotSecure) {
             },
             "realtime": {
                 "provider": "volc",
-                "endpoint": "ws://example.com/realtime"
+                "connection": {
+                    "endpoint": "ws://example.com/realtime"
+                }
             }
         })");
 
@@ -264,7 +282,82 @@ TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
             },
             "realtime": {
                 "provider": "volc",
-                "input_mod": "audio"
+                "dialog": {
+                    "input_mod": "audio"
+                }
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证安全相关开关必须是 JSON 布尔值，字符串 "false" 不能被隐式当作开启或关闭。
+TEST(ConfigTest, ThrowsWhenRealtimeDialogFlagHasWrongType) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_volc_dialog_flag_type_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "dialog": {
+                    "strict_audit": "false"
+                }
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证 TTS 采样率必须为正数；0 无法描述可播放的 PCM 输出格式。
+TEST(ConfigTest, ThrowsWhenRealtimeTtsSampleRateIsNotPositive) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_volc_tts_sample_rate_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "tts": {
+                    "sample_rate_hz": 0
+                }
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
+}
+
+// 验证旧版平铺字段不会被静默忽略；显式迁移错误能防止自定义 endpoint 意外退回默认地址。
+TEST(ConfigTest, ThrowsForLegacyFlatRealtimeConfig) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "legacy_flat_realtime_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "endpoint": "wss://legacy.example.com/realtime"
             }
         })");
 

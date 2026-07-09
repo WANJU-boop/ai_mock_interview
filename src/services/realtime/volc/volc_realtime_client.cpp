@@ -15,22 +15,24 @@ std::vector<std::uint8_t> toBytes(const std::string& text) {
     return {text.begin(), text.end()};
 }
 
-nlohmann::json buildStartSessionPayload(const VolcRealtimeClientConfig& config) {
+nlohmann::json buildStartSessionPayload(const VolcRealtimeRuntimeConfig& config) {
     // 文本模式仍然显式传 asr.extra / tts.extra 空对象，避免服务端把 null 配置视为坏请求。
     // 这里同时保留 TTS audio_config，是因为即使
     // input_mod=text，服务端仍可能需要知道面试官文本如何合成语音。
-    return {
-        {"asr", {{"extra", nlohmann::json::object()}}},
-        {"dialog",
-         {{"extra",
-           {{"input_mod", config.input_mod},
-            {"model", config.model},
-            {"strict_audit", true},
-            {"enable_volc_websearch", false}}}}},
-        {"tts",
-         {{"speaker", config.speaker},
-          {"extra", nlohmann::json::object()},
-          {"audio_config", {{"channel", 1}, {"format", "pcm_s16le"}, {"sample_rate", 24000}}}}}};
+    return {{"asr", {{"extra", nlohmann::json::object()}}},
+            {"dialog",
+             {{"extra",
+               {{"input_mod", config.input_mod},
+                {"model", config.model},
+                {"strict_audit", config.strict_audit},
+                {"enable_volc_websearch", config.enable_volc_websearch}}}}},
+            {"tts",
+             {{"speaker", config.speaker},
+              {"extra", nlohmann::json::object()},
+              {"audio_config",
+               {{"channel", config.tts_channels},
+                {"format", config.tts_audio_format},
+                {"sample_rate", config.tts_sample_rate_hz}}}}}};
 }
 
 std::string buildTextQueryPayload(const std::string& content) {
@@ -41,7 +43,7 @@ std::string buildTextQueryPayload(const std::string& content) {
 
 } // namespace
 
-VolcRealtimeClient::VolcRealtimeClient(VolcRealtimeClientConfig config,
+VolcRealtimeClient::VolcRealtimeClient(VolcRealtimeRuntimeConfig config,
                                        std::shared_ptr<IVolcRealtimeTransport> transport)
     : config_(std::move(config)), transport_(std::move(transport)) {
     // 构造阶段就校验配置，能让单元测试和手动 demo 在联网前失败，
@@ -202,6 +204,15 @@ void VolcRealtimeClient::validateConfig() const {
         // 当前阶段只实现文本模式。audio 模式会涉及麦克风采集、音频编码、TaskRequest 流式发送，
         // 必须等 IAudioDevice/PortAudio 阶段完成后再打开。
         throw std::runtime_error("当前 VolcRealtimeClient 只实现 input_mod=text 文本模式。");
+    }
+    if (config_.speaker.empty()) {
+        throw std::runtime_error("火山 realtime speaker 不能为空。");
+    }
+    if (config_.tts_audio_format.empty()) {
+        throw std::runtime_error("火山 realtime TTS audio format 不能为空。");
+    }
+    if (config_.tts_sample_rate_hz <= 0 || config_.tts_channels <= 0) {
+        throw std::runtime_error("火山 realtime TTS sample rate 和 channels 必须是正数。");
     }
     if (config_.timeout_ms <= 0) {
         throw std::runtime_error("火山 realtime timeout_ms 必须是正数。");

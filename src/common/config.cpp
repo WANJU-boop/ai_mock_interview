@@ -117,8 +117,38 @@ int readPositiveIntWithDefault(const nlohmann::json& parent, const std::string& 
     return requirePositiveInt(parent, key);
 }
 
+// 布尔开关必须使用 JSON true/false，不能接受字符串 "true" 或整数 1，
+// 避免供应商审核、联网搜索等安全选项因为隐式转换而意外开启。
+bool readBoolWithDefault(const nlohmann::json& parent, const std::string& key, bool default_value) {
+    if (!parent.contains(key)) {
+        return default_value;
+    }
+
+    const nlohmann::json& value = parent.at(key);
+    if (!value.is_boolean()) {
+        throw std::runtime_error("配置字段必须是布尔值：" + key);
+    }
+
+    return value.get<bool>();
+}
+
 bool startsWith(const std::string& value, const std::string& prefix) {
     return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
+}
+
+void rejectLegacyRealtimeFields(const nlohmann::json& realtime) {
+    // 旧版把 connection/dialog/tts 字段全部平铺。继续静默接受会让拼错层级的自定义 endpoint
+    // 被默认值覆盖，因此明确报迁移错误比“看似加载成功、实际连接错服务”更安全。
+    const std::vector<std::string> legacy_fields = {
+        "endpoint",   "app_id_env", "access_key_env", "resource_id", "app_key",
+        "timeout_ms", "model",      "input_mod",      "speaker",
+    };
+    for (const std::string& field : legacy_fields) {
+        if (realtime.contains(field)) {
+            throw std::runtime_error("realtime." + field +
+                                     " 已迁移到 connection/dialog/tts 子 section");
+        }
+    }
 }
 
 // mock provider 不需要网络字段；只有真实 HTTP provider 才强制检查加密传输和密钥来源。
@@ -154,20 +184,24 @@ void validateRealtimeConfig(const AppConfig& config) {
     // 1. endpoint 必须是加密 WSS
     // 2. 配置文件只保存环境变量名
     // 3. 当前阶段只允许 text 模式，避免误以为音频链路已经完成。
-    if (config.realtime.endpoint.empty()) {
-        throw std::runtime_error("volc realtime 要求 realtime.endpoint 不能为空");
+    if (config.realtime.connection.endpoint.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.connection.endpoint 不能为空");
     }
-    if (!startsWith(config.realtime.endpoint, "wss://")) {
-        throw std::runtime_error("volc realtime 要求 realtime.endpoint 以 wss:// 开头");
+    if (!startsWith(config.realtime.connection.endpoint, "wss://")) {
+        throw std::runtime_error("volc realtime 要求 realtime.connection.endpoint 以 wss:// 开头");
     }
-    if (config.realtime.app_id_env.empty()) {
-        throw std::runtime_error("volc realtime 要求 realtime.app_id_env 不能为空");
+    if (config.realtime.connection.app_id_env.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.connection.app_id_env 不能为空");
     }
-    if (config.realtime.access_key_env.empty()) {
-        throw std::runtime_error("volc realtime 要求 realtime.access_key_env 不能为空");
+    if (config.realtime.connection.access_key_env.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.connection.access_key_env 不能为空");
     }
-    if (config.realtime.input_mod != "text") {
-        throw std::runtime_error("当前阶段只支持 realtime.input_mod=text，audio 模式留到音频模块");
+    if (config.realtime.dialog.input_mod != "text") {
+        throw std::runtime_error(
+            "当前阶段只支持 realtime.dialog.input_mod=text，audio 模式留到音频模块");
+    }
+    if (config.realtime.tts.audio_format.empty()) {
+        throw std::runtime_error("volc realtime 要求 realtime.tts.audio_format 不能为空");
     }
 }
 
@@ -247,23 +281,49 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
     if (root.contains("realtime")) {
         const nlohmann::json& realtime = requireObject(root, "realtime");
         config.realtime.provider = requireString(realtime, "provider");
-        config.realtime.endpoint =
-            readOptionalStringWithDefault(realtime, "endpoint", config.realtime.endpoint);
-        config.realtime.app_id_env =
-            readOptionalStringWithDefault(realtime, "app_id_env", config.realtime.app_id_env);
-        config.realtime.access_key_env = readOptionalStringWithDefault(
-            realtime, "access_key_env", config.realtime.access_key_env);
-        config.realtime.resource_id =
-            readOptionalStringWithDefault(realtime, "resource_id", config.realtime.resource_id);
-        config.realtime.app_key =
-            readOptionalStringWithDefault(realtime, "app_key", config.realtime.app_key);
-        config.realtime.model =
-            readOptionalStringWithDefault(realtime, "model", config.realtime.model);
-        config.realtime.input_mod =
-            readOptionalStringWithDefault(realtime, "input_mod", config.realtime.input_mod);
-        config.realtime.speaker =
-            readOptionalStringWithDefault(realtime, "speaker", config.realtime.speaker);
-        config.realtime.timeout_ms = readPositiveIntWithDefault(realtime, "timeout_ms", 30000);
+        rejectLegacyRealtimeFields(realtime);
+
+        // 三个子 section 分别描述连接、供应商 Dialog 和 TTS，避免 endpoint、模型、音频格式
+        // 全部平铺在一个结构里。section 可省略时继续使用 config.h 中唯一的一组默认值。
+        if (realtime.contains("connection")) {
+            const nlohmann::json& connection = requireObject(realtime, "connection");
+            config.realtime.connection.endpoint = readOptionalStringWithDefault(
+                connection, "endpoint", config.realtime.connection.endpoint);
+            config.realtime.connection.app_id_env = readOptionalStringWithDefault(
+                connection, "app_id_env", config.realtime.connection.app_id_env);
+            config.realtime.connection.access_key_env = readOptionalStringWithDefault(
+                connection, "access_key_env", config.realtime.connection.access_key_env);
+            config.realtime.connection.resource_id = readOptionalStringWithDefault(
+                connection, "resource_id", config.realtime.connection.resource_id);
+            config.realtime.connection.app_key = readOptionalStringWithDefault(
+                connection, "app_key", config.realtime.connection.app_key);
+            config.realtime.connection.timeout_ms = readPositiveIntWithDefault(
+                connection, "timeout_ms", config.realtime.connection.timeout_ms);
+        }
+
+        if (realtime.contains("dialog")) {
+            const nlohmann::json& dialog = requireObject(realtime, "dialog");
+            config.realtime.dialog.model =
+                readOptionalStringWithDefault(dialog, "model", config.realtime.dialog.model);
+            config.realtime.dialog.input_mod = readOptionalStringWithDefault(
+                dialog, "input_mod", config.realtime.dialog.input_mod);
+            config.realtime.dialog.strict_audit =
+                readBoolWithDefault(dialog, "strict_audit", config.realtime.dialog.strict_audit);
+            config.realtime.dialog.enable_volc_websearch = readBoolWithDefault(
+                dialog, "enable_volc_websearch", config.realtime.dialog.enable_volc_websearch);
+        }
+
+        if (realtime.contains("tts")) {
+            const nlohmann::json& tts = requireObject(realtime, "tts");
+            config.realtime.tts.speaker =
+                readOptionalStringWithDefault(tts, "speaker", config.realtime.tts.speaker);
+            config.realtime.tts.audio_format = readOptionalStringWithDefault(
+                tts, "audio_format", config.realtime.tts.audio_format);
+            config.realtime.tts.sample_rate_hz = readPositiveIntWithDefault(
+                tts, "sample_rate_hz", config.realtime.tts.sample_rate_hz);
+            config.realtime.tts.channels =
+                readPositiveIntWithDefault(tts, "channels", config.realtime.tts.channels);
+        }
     }
 
     // 所有字段装配完成后再做跨字段/provider 校验，保证校验函数看到的是完整配置。

@@ -151,7 +151,7 @@ mapVolcRealtimeFrameToRealtimeEvent(const VolcRealtimeFrame& frame) {
 }
 
 VolcRealtimeClientAdapter::VolcRealtimeClientAdapter(
-    VolcRealtimeClientConfig config, std::shared_ptr<IVolcRealtimeTransport> transport)
+    VolcRealtimeRuntimeConfig config, std::shared_ptr<IVolcRealtimeTransport> transport)
     : client_(std::move(config), std::move(transport)) {}
 
 bool VolcRealtimeClientAdapter::connect() {

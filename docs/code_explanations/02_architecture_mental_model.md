@@ -118,7 +118,9 @@ Realtime mock 流验证“实时事件驱动面试”这件事，但不碰真实
 
 ```text
 main_volc_realtime_text_demo.cpp
-  -> 从环境变量读取 VOLC_APP_ID / VOLC_ACCESS_KEY
+  -> loadConfigFromFile 读取唯一 JSON 配置
+  -> resolveVolcRealtimeRuntimeConfig
+  -> 按配置指定的环境变量读取 App ID / Access Key，并生成运行时 connection/session ID
   -> BeastVolcRealtimeTransport
   -> VolcRealtimeClient
   -> WSS handshake
