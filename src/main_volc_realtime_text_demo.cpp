@@ -46,6 +46,7 @@ int main(int argc, char* argv[]) {
         config.session_id = makeId("session");
 
         const std::string query = argc > 1 ? argv[1] : "请用一句中文介绍一下 RAII。";
+        // 真实 transport 只在手动集成入口创建；单元测试仍注入 fake，避免默认测试联网。
         auto transport = std::make_shared<interview::services::BeastVolcRealtimeTransport>();
         interview::services::VolcRealtimeClient client(config, transport);
 
@@ -59,6 +60,7 @@ int main(int argc, char* argv[]) {
         client.receiveUntilEvent(interview::services::VolcRealtimeEventId::kSessionStarted);
         client.sendTextQuery(query);
 
+        // 服务端可能先返回多帧中间结果，读取到 ChatEnded 才表示这一轮文本对话完整结束。
         const std::vector<interview::services::VolcRealtimeFrame> frames =
             client.receiveUntilChatEnded();
         for (const interview::services::VolcRealtimeFrame& frame : frames) {
@@ -68,6 +70,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // 按“会话 -> 业务连接 -> WebSocket”的顺序收口，避免直接断开留下半结束状态。
         client.finishSession();
         client.finishConnection();
         client.close();

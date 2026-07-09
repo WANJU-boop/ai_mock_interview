@@ -56,6 +56,8 @@ RealtimeEventType decodeEventType(std::uint8_t raw_type) {
     }
 }
 
+// 可变字段按顺序读取，因此 offset 来自前一个已经验证成功的字段末尾。
+// 使用“所需长度 <= 剩余长度”避免 offset + field_size 的加法溢出。
 void ensureAvailable(const std::vector<std::uint8_t>& frame, std::size_t offset,
                      std::size_t field_size, const char* field_name) {
     if (field_size > frame.size() - offset) {
