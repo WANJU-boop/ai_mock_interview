@@ -21,7 +21,7 @@ mapVolcRealtimeFrameToRealtimeEvent(const VolcRealtimeFrame& frame);
 // 不需要认识火山 event id、payload JSON 或二进制音频 frame。
 class VolcRealtimeClientAdapter final : public IRealtimeClient {
   public:
-    VolcRealtimeClientAdapter(VolcRealtimeClientConfig config,
+    VolcRealtimeClientAdapter(VolcRealtimeRuntimeConfig config,
                               std::shared_ptr<IVolcRealtimeTransport> transport);
 
     // 建立火山连接和 session，并把成功状态转换成项目内部 kConnected。

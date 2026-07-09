@@ -77,11 +77,18 @@ DialogSession
 src/main_volc_realtime_text_demo.cpp
 ```
 
-运行前需要环境变量：
+运行前把 `config.example.json` 复制为被 Git 忽略的 `config.local.json`，将
+`realtime.provider` 改为 `volc`。真实密钥仍只通过配置指定的环境变量注入：
 
 ```text
 VOLC_APP_ID
 VOLC_ACCESS_KEY
+```
+
+手动运行时，第一个参数是配置文件，第二个参数是可选问题：
+
+```bash
+./build/AI_mock_interview_volc_text_demo config.local.json "请解释 RAII。"
 ```
 
 真实调用顺序：

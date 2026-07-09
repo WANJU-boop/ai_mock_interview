@@ -1,32 +1,14 @@
+#include "common/config.h"
 #include "services/realtime/volc/beast_volc_realtime_transport.h"
 #include "services/realtime/volc/volc_realtime_client.h"
+#include "services/realtime/volc/volc_realtime_runtime.h"
 
-#include <chrono>
-#include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
 
 namespace {
-
-std::string requireEnv(const char* name) {
-    // 手动 demo 从环境变量读取密钥，避免把真实 App ID / Access Key 写进仓库。
-    const char* value = std::getenv(name);
-    if (value == nullptr || std::string(value).empty()) {
-        throw std::runtime_error(std::string("请先设置环境变量：") + name);
-    }
-
-    return value;
-}
-
-std::string makeId(const std::string& prefix) {
-    // 火山连接和会话都需要可追踪 ID。这里用时间戳生成简单 ID，
-    // 只用于手动 smoke test，不要求跨机器全局唯一。
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    return prefix + "-" + std::to_string(milliseconds);
-}
 
 std::string payloadToString(const interview::services::VolcRealtimeFrame& frame) {
     // 文本 demo 只打印 ChatResponse 的 JSON payload；不要打印鉴权 header 或完整请求配置。
@@ -38,17 +20,18 @@ std::string payloadToString(const interview::services::VolcRealtimeFrame& frame)
 int main(int argc, char* argv[]) {
     try {
         // 这个入口是手动集成检查，不属于默认单元测试。
-        // 运行前需要在 shell 里设置 VOLC_APP_ID 和 VOLC_ACCESS_KEY。
-        interview::services::VolcRealtimeClientConfig config;
-        config.app_id = requireEnv("VOLC_APP_ID");
-        config.access_key = requireEnv("VOLC_ACCESS_KEY");
-        config.connect_id = makeId("connect");
-        config.session_id = makeId("session");
+        // 第一个参数是统一配置文件，第二个参数才是可选问题；真实密钥仍由配置指定的环境变量注入。
+        const std::string config_path =
+            argc > 1 ? argv[1] : interview::common::findDefaultConfigPath(argv[0]);
+        const interview::common::AppConfig app_config =
+            interview::common::loadConfigFromFile(config_path);
+        const interview::services::VolcRealtimeRuntimeConfig runtime_config =
+            interview::services::resolveVolcRealtimeRuntimeConfig(app_config.realtime);
+        const std::string query = argc > 2 ? argv[2] : "请用一句中文介绍一下 RAII。";
 
-        const std::string query = argc > 1 ? argv[1] : "请用一句中文介绍一下 RAII。";
         // 真实 transport 只在手动集成入口创建；单元测试仍注入 fake，避免默认测试联网。
         auto transport = std::make_shared<interview::services::BeastVolcRealtimeTransport>();
-        interview::services::VolcRealtimeClient client(config, transport);
+        interview::services::VolcRealtimeClient client(runtime_config, transport);
 
         // 火山文本模式的最小真实调用顺序：
         // WebSocket 握手 -> StartConnection -> StartSession(text) -> ChatTextQuery -> ChatEnded ->

@@ -60,6 +60,7 @@ add_library(services_lib
     src/services/realtime/volc/volc_realtime_client_adapter.cpp
     src/services/realtime/volc/volc_realtime_client.cpp
     src/services/realtime/volc/volc_realtime_protocol.cpp
+    src/services/realtime/volc/volc_realtime_runtime.cpp
     src/services/services.cpp
 )
 
@@ -157,6 +158,7 @@ add_executable(${PROJECT_NAME}_volc_text_demo
 
 target_link_libraries(${PROJECT_NAME}_volc_text_demo
     PRIVATE
+        common_lib
         services_lib
 )
 

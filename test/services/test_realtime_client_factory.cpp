@@ -12,6 +12,7 @@
 #include "common/config.h"
 #include "common/realtime_protocol.h"
 #include "services/realtime/realtime_client_factory.h"
+#include "services/realtime/volc/volc_realtime_runtime.h"
 // clang-format on
 
 namespace {
@@ -75,10 +76,10 @@ TEST(RealtimeClientFactoryTest, ThrowsForUnsupportedProvider) {
 TEST(RealtimeClientFactoryTest, ThrowsWhenVolcEnvironmentVariableIsMissing) {
     interview::common::RealtimeConfig config;
     config.provider = "volc";
-    config.app_id_env = "MISSING_TEST_VOLC_APP_ID";
-    config.access_key_env = "MISSING_TEST_VOLC_ACCESS_KEY";
-    unsetenv(config.app_id_env.c_str());
-    unsetenv(config.access_key_env.c_str());
+    config.connection.app_id_env = "MISSING_TEST_VOLC_APP_ID";
+    config.connection.access_key_env = "MISSING_TEST_VOLC_ACCESS_KEY";
+    unsetenv(config.connection.app_id_env.c_str());
+    unsetenv(config.connection.access_key_env.c_str());
 
     EXPECT_THROW(interview::services::createRealtimeClient(config, {}), std::runtime_error);
 }
@@ -87,14 +88,65 @@ TEST(RealtimeClientFactoryTest, ThrowsWhenVolcEnvironmentVariableIsMissing) {
 TEST(RealtimeClientFactoryTest, CreatesVolcRealtimeClientWithoutConnecting) {
     interview::common::RealtimeConfig config;
     config.provider = "volc";
-    config.endpoint = "wss://example.com/realtime";
-    config.app_id_env = "TEST_VOLC_FACTORY_APP_ID";
-    config.access_key_env = "TEST_VOLC_FACTORY_ACCESS_KEY";
-    const ScopedEnv app_id(config.app_id_env, "fake-app-id");
-    const ScopedEnv access_key(config.access_key_env, "fake-access-key");
+    config.connection.endpoint = "wss://example.com/realtime";
+    config.connection.app_id_env = "TEST_VOLC_FACTORY_APP_ID";
+    config.connection.access_key_env = "TEST_VOLC_FACTORY_ACCESS_KEY";
+    const ScopedEnv app_id(config.connection.app_id_env, "fake-app-id");
+    const ScopedEnv access_key(config.connection.access_key_env, "fake-access-key");
 
     std::unique_ptr<interview::services::IRealtimeClient> client =
         interview::services::createRealtimeClient(config, {});
 
     ASSERT_NE(client, nullptr);
+}
+
+// 验证统一解析函数会把连接、Dialog、TTS 和环境变量密钥完整映射到运行时对象。
+// 这个边界重要，因为主 factory 和手动 demo 都依赖同一映射，不能再各自维护默认值。
+TEST(RealtimeClientFactoryTest, ResolvesCompleteVolcRuntimeConfig) {
+    interview::common::RealtimeConfig config;
+    config.provider = "volc";
+    config.connection.endpoint = "wss://example.com/realtime";
+    config.connection.app_id_env = "TEST_VOLC_RUNTIME_APP_ID";
+    config.connection.access_key_env = "TEST_VOLC_RUNTIME_ACCESS_KEY";
+    config.connection.resource_id = "test-resource";
+    config.connection.app_key = "test-public-app-key";
+    config.connection.timeout_ms = 45000;
+    config.dialog.model = "test-model";
+    config.dialog.input_mod = "text";
+    config.dialog.strict_audit = false;
+    config.dialog.enable_volc_websearch = true;
+    config.tts.speaker = "test-speaker";
+    config.tts.audio_format = "pcm_s16le";
+    config.tts.sample_rate_hz = 16000;
+    config.tts.channels = 2;
+    const ScopedEnv app_id(config.connection.app_id_env, "fake-app-id");
+    const ScopedEnv access_key(config.connection.access_key_env, "fake-access-key");
+
+    const interview::services::VolcRealtimeRuntimeConfig runtime =
+        interview::services::resolveVolcRealtimeRuntimeConfig(config);
+
+    EXPECT_EQ(runtime.endpoint, "wss://example.com/realtime");
+    EXPECT_EQ(runtime.app_id, "fake-app-id");
+    EXPECT_EQ(runtime.access_key, "fake-access-key");
+    EXPECT_EQ(runtime.resource_id, "test-resource");
+    EXPECT_EQ(runtime.app_key, "test-public-app-key");
+    EXPECT_EQ(runtime.model, "test-model");
+    EXPECT_EQ(runtime.input_mod, "text");
+    EXPECT_FALSE(runtime.strict_audit);
+    EXPECT_TRUE(runtime.enable_volc_websearch);
+    EXPECT_EQ(runtime.speaker, "test-speaker");
+    EXPECT_EQ(runtime.tts_audio_format, "pcm_s16le");
+    EXPECT_EQ(runtime.tts_sample_rate_hz, 16000);
+    EXPECT_EQ(runtime.tts_channels, 2);
+    EXPECT_EQ(runtime.timeout_ms, 45000);
+    EXPECT_EQ(runtime.connect_id.rfind("connect-", 0), 0u);
+    EXPECT_EQ(runtime.session_id.rfind("session-", 0), 0u);
+}
+
+// 验证 mock 配置不能误走火山运行时解析，避免手动 demo 忽略 provider 后意外联网。
+TEST(RealtimeClientFactoryTest, RejectsRuntimeResolutionForNonVolcProvider) {
+    interview::common::RealtimeConfig config;
+    config.provider = "mock";
+
+    EXPECT_THROW(interview::services::resolveVolcRealtimeRuntimeConfig(config), std::runtime_error);
 }
