@@ -1,4 +1,4 @@
-#include "services/realtime_client.h"
+#include "services/realtime/mock/mock_realtime_client.h"
 
 #include <gtest/gtest.h>
 #include <stdexcept>

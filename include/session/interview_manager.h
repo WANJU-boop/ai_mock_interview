@@ -1,6 +1,6 @@
 #pragma once
 
-#include "services/llm_client.h"
+#include "services/llm/llm_client.h"
 
 #include <cstddef>
 #include <string>

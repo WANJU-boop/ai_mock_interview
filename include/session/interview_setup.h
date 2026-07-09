@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common/config.h"
-#include "services/llm_client.h"
-#include "services/pdf_parser.h"
+#include "services/llm/llm_client.h"
+#include "services/pdf/pdf_parser.h"
 #include "session/interview_manager.h"
 
 #include <memory>

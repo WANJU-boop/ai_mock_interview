@@ -2,7 +2,7 @@
 
 #include "common/config.h"
 #include "common/realtime_protocol.h"
-#include "services/realtime_client.h"
+#include "services/realtime/realtime_client.h"
 
 #include <memory>
 #include <vector>

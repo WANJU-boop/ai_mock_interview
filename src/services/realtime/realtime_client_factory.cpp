@@ -1,7 +1,8 @@
-#include "services/realtime_client_factory.h"
+#include "services/realtime/realtime_client_factory.h"
 
-#include "services/beast_volc_realtime_transport.h"
-#include "services/volc_realtime_client_adapter.h"
+#include "services/realtime/mock/mock_realtime_client.h"
+#include "services/realtime/volc/beast_volc_realtime_transport.h"
+#include "services/realtime/volc/volc_realtime_client_adapter.h"
 
 #include <chrono>
 #include <cstdlib>

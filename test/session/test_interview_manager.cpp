@@ -1,4 +1,5 @@
-#include "services/llm_client.h"
+#include "services/llm/llm_client.h"
+#include "services/llm/mock/mock_llm_client.h"
 #include "session/dialog_session.h"
 #include "session/interview_manager.h"
 

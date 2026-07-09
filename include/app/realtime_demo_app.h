@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/realtime_protocol.h"
-#include "services/realtime_client.h"
+#include "services/realtime/realtime_client.h"
 #include "session/interview_setup.h"
 
 #include <cstddef>

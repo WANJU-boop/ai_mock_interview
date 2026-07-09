@@ -1,6 +1,6 @@
 // clang-format off
-#include "services/http_llm_client.h"
-#include "services/llm_client_factory.h"
+#include "services/llm/http/http_llm_client.h"
+#include "services/llm/llm_client_factory.h"
 
 #include <memory>
 #include <stdexcept>

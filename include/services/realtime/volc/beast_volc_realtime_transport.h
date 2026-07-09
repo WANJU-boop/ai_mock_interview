@@ -1,6 +1,6 @@
 #pragma once
 
-#include "services/volc_realtime_client.h"
+#include "services/realtime/volc/volc_realtime_transport.h"
 
 #include <memory>
 

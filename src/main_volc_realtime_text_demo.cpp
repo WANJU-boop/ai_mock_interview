@@ -1,5 +1,5 @@
-#include "services/beast_volc_realtime_transport.h"
-#include "services/volc_realtime_client.h"
+#include "services/realtime/volc/beast_volc_realtime_transport.h"
+#include "services/realtime/volc/volc_realtime_client.h"
 
 #include <chrono>
 #include <cstdlib>

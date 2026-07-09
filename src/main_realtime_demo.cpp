@@ -1,9 +1,9 @@
 #include "app/realtime_demo_app.h"
 #include "common/config.h"
 #include "common/logger.h"
-#include "services/llm_client_factory.h"
-#include "services/pdf_parser.h"
-#include "services/realtime_client_factory.h"
+#include "services/llm/llm_client_factory.h"
+#include "services/pdf/podofo/podofo_pdf_parser.h"
+#include "services/realtime/realtime_client_factory.h"
 #include "session/interview_setup.h"
 
 #include <exception>

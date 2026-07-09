@@ -1,6 +1,8 @@
 #include "common/config.h"
-#include "services/llm_client.h"
-#include "services/pdf_parser.h"
+#include "services/llm/llm_client.h"
+#include "services/llm/mock/mock_llm_client.h"
+#include "services/pdf/mock/mock_pdf_parser.h"
+#include "services/pdf/pdf_parser.h"
 #include "session/interview_setup.h"
 
 #include <gtest/gtest.h>

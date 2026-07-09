@@ -1,4 +1,4 @@
-#include "services/volc_realtime_protocol.h"
+#include "services/realtime/volc/volc_realtime_protocol.h"
 
 #include <cstdint>
 #include <gtest/gtest.h>

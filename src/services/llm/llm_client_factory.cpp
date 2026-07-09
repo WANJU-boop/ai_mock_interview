@@ -1,7 +1,8 @@
-#include "services/llm_client_factory.h"
+#include "services/llm/llm_client_factory.h"
 
-#include "services/beast_http_transport.h"
-#include "services/http_llm_client.h"
+#include "services/llm/http/beast_http_transport.h"
+#include "services/llm/http/http_llm_client.h"
+#include "services/llm/mock/mock_llm_client.h"
 
 #include <memory>
 #include <stdexcept>

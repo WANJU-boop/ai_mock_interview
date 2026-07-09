@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common/realtime_protocol.h"
-#include "services/realtime_client.h"
-#include "services/volc_realtime_client.h"
+#include "services/realtime/realtime_client.h"
+#include "services/realtime/volc/volc_realtime_client.h"
 
 #include <deque>
 #include <memory>

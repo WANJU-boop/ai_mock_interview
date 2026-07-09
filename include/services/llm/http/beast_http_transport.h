@@ -1,6 +1,6 @@
 #pragma once
 
-#include "services/http_llm_client.h"
+#include "services/llm/http/http_transport.h"
 
 namespace interview {
 namespace services {

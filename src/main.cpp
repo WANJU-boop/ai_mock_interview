@@ -1,8 +1,8 @@
 #include "app/cli_interview_app.h"
 #include "common/config.h"
 #include "common/logger.h"
-#include "services/llm_client_factory.h"
-#include "services/pdf_parser.h"
+#include "services/llm/llm_client_factory.h"
+#include "services/pdf/podofo/podofo_pdf_parser.h"
 #include "session/interview_setup.h"
 
 #include <exception>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/config.h"
-#include "services/llm_client.h"
+#include "services/llm/llm_client.h"
 
 #include <memory>
 

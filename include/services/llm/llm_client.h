@@ -46,12 +46,5 @@ class ILlmClient {
     virtual LlmScoreResult scoreAnswer(const AnswerScoringRequest& request) = 0;
 };
 
-// Mock 实现用于当前阶段的确定性测试；真实 HTTP 客户端会在后续 milestone 单独接入。
-class MockLlmClient final : public ILlmClient {
-  public:
-    std::vector<std::string> generateQuestions(const QuestionGenerationRequest& request) override;
-    LlmScoreResult scoreAnswer(const AnswerScoringRequest& request) override;
-};
-
 } // namespace services
 } // namespace interview

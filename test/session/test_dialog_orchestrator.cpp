@@ -1,5 +1,6 @@
-#include "services/llm_client.h"
-#include "services/pdf_parser.h"
+#include "services/llm/mock/mock_llm_client.h"
+#include "services/pdf/mock/mock_pdf_parser.h"
+#include "services/realtime/mock/mock_realtime_client.h"
 #include "session/dialog_orchestrator.h"
 #include "session/interview_setup.h"
 

@@ -1,6 +1,7 @@
 #include "app/realtime_demo_app.h"
-#include "services/llm_client.h"
-#include "services/pdf_parser.h"
+#include "services/llm/mock/mock_llm_client.h"
+#include "services/pdf/mock/mock_pdf_parser.h"
+#include "services/realtime/mock/mock_realtime_client.h"
 #include "session/interview_setup.h"
 
 #include <gtest/gtest.h>

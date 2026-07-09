@@ -1,6 +1,6 @@
 #pragma once
 
-#include "services/realtime_client.h"
+#include "services/realtime/realtime_client.h"
 #include "session/dialog_session.h"
 #include "session/interview_setup.h"
 

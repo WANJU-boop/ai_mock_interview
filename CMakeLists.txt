@@ -48,18 +48,19 @@ target_link_libraries(common_lib
 # service 模块转成库
 # =========================
 add_library(services_lib
-    src/services/beast_http_transport.cpp
-    src/services/beast_volc_realtime_transport.cpp
-    src/services/http_llm_client.cpp
-    src/services/llm_client.cpp
-    src/services/llm_client_factory.cpp
-    src/services/pdf_parser.cpp
-    src/services/realtime_client.cpp
-    src/services/realtime_client_factory.cpp
+    src/services/llm/http/beast_http_transport.cpp
+    src/services/llm/http/http_llm_client.cpp
+    src/services/llm/llm_client_factory.cpp
+    src/services/llm/mock/mock_llm_client.cpp
+    src/services/pdf/mock/mock_pdf_parser.cpp
+    src/services/pdf/podofo/podofo_pdf_parser.cpp
+    src/services/realtime/mock/mock_realtime_client.cpp
+    src/services/realtime/realtime_client_factory.cpp
+    src/services/realtime/volc/beast_volc_realtime_transport.cpp
+    src/services/realtime/volc/volc_realtime_client_adapter.cpp
+    src/services/realtime/volc/volc_realtime_client.cpp
+    src/services/realtime/volc/volc_realtime_protocol.cpp
     src/services/services.cpp
-    src/services/volc_realtime_client_adapter.cpp
-    src/services/volc_realtime_client.cpp
-    src/services/volc_realtime_protocol.cpp
 )
 
 target_include_directories(services_lib

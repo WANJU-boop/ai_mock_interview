@@ -11,7 +11,7 @@
 
 #include "common/config.h"
 #include "common/realtime_protocol.h"
-#include "services/realtime_client_factory.h"
+#include "services/realtime/realtime_client_factory.h"
 // clang-format on
 
 namespace {

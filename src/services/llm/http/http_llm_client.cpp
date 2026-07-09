@@ -1,4 +1,4 @@
-#include "services/http_llm_client.h"
+#include "services/llm/http/http_llm_client.h"
 
 #include <cstdlib>
 #include <nlohmann/json.hpp>

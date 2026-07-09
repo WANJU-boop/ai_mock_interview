@@ -1,6 +1,7 @@
 #include "app/realtime_demo_app.h"
 
-#include "services/realtime_client.h"
+#include "services/realtime/mock/mock_realtime_client.h"
+#include "services/realtime/realtime_client.h"
 #include "session/dialog_orchestrator.h"
 #include "session/interview_report.h"
 
