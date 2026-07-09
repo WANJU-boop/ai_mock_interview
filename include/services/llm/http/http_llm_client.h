@@ -19,11 +19,16 @@ class HttpLlmClient final : public ILlmClient {
     explicit HttpLlmClient(const common::LlmConfig& config,
                            std::shared_ptr<IHttpTransport> transport);
 
+    // 把领域请求转换成结构化 chat completions 请求，再校验并返回题目数组。
+    // 网络、HTTP 状态码或响应格式错误会通过异常交给启动层统一收口。
     std::vector<std::string> generateQuestions(const QuestionGenerationRequest& request) override;
+    // 发送一条结构化评分请求；返回前保证分数位于 0..100 且反馈非空。
     LlmScoreResult scoreAnswer(const AnswerScoringRequest& request) override;
 
   private:
+    // 配置按值保存，保证客户端不会引用入口层的临时配置对象。
     common::LlmConfig config_;
+    // shared_ptr 允许测试持有同一个 fake transport 并在调用后检查收到的请求。
     std::shared_ptr<IHttpTransport> transport_;
 };
 

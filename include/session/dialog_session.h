@@ -1,27 +1,34 @@
 #pragma once
 
+// clang-format off
 #include <cstddef>
 #include <string>
 #include <vector>
 
 #include "session/interview_state.h"
+// clang-format on
 
 namespace interview {
 namespace session {
 
 // 保存一题回答对应的评分结果，供总结阶段直接展示。
 struct ScoreResultRecord {
+    // 分数约定为 0..100；具体校验由评分服务负责。
     int score = 0;
+    // 面向候选人的简短反馈，可由 CLI、报告或未来 UI 直接展示。
     std::string feedback;
 };
 
 // 保存一题完整问答记录，避免把追问内容拼进普通回答字符串里。
 struct QuestionAnswerRecord {
+    // 主问题和主回答始终成对保存，保持报告中的题目归属。
     std::string question;
     std::string candidate_answer;
+    // false 时追问字段保持空字符串，调用方不需要使用魔法值判断。
     bool has_follow_up = false;
     std::string follow_up_prompt;
     std::string follow_up_answer;
+    // 如果发生追问，这里保存组合主回答和追问回答后得到的最终评分。
     ScoreResultRecord final_score;
 };
 
@@ -31,7 +38,7 @@ struct QuestionAnswerRecord {
 // 3. 每道题对应的评分结果历史
 // 4. 每道题的结构化问答记录
 class DialogSession {
-public:
+  public:
     // 默认从“连接中”状态开始，回答历史为空。
     DialogSession();
 
@@ -71,7 +78,7 @@ public:
     // 返回当前已保存的完整问答记录数量，便于测试和流程统计。
     std::size_t getQuestionAnswerRecordCount() const;
 
-private:
+  private:
     // 当前流程状态，默认从连接阶段开始。
     InterviewState current_state_ = InterviewState::kConnecting;
     // 依次保存用户在每一道题下输入的回答文本。
@@ -82,5 +89,5 @@ private:
     std::vector<QuestionAnswerRecord> question_answer_records_;
 };
 
-}  // namespace session
-}  // namespace interview
+} // namespace session
+} // namespace interview

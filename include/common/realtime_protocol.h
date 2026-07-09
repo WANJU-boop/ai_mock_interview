@@ -22,9 +22,13 @@ enum class RealtimeEventType {
 // 一条 realtime 业务事件。当前阶段只保存文本、错误信息和可选二进制载荷，
 // 后续接入真实语音服务时可以把音频 chunk 或服务端原始 payload 放进 payload。
 struct RealtimeEvent {
+    // type 决定其它字段的解释方式，也是编排状态机的分派依据。
     RealtimeEventType type = RealtimeEventType::kConnected;
+    // transcript 和面试官事件使用 text；其它事件通常保持为空。
     std::string text;
+    // kError 使用 error_message，避免把错误文本误当成候选人转写。
     std::string error_message;
+    // 为未来音频 chunk 或未结构化供应商数据预留；普通文本事件可以为空。
     std::vector<std::uint8_t> payload;
 };
 
