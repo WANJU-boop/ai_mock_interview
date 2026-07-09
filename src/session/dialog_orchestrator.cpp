@@ -5,20 +5,28 @@
 #include <cstddef>
 #include <string>
 
+// DialogOrchestrator 是 realtime 事件和面试领域逻辑之间的同步状态机：
+// IRealtimeClient 产生事件 -> InterviewManager 记录/评分 -> DialogSession 保存结果 ->
+// 面试官文本再通过 IRealtimeClient 发出。任何失败都统一进入 kError 并关闭客户端。
 namespace interview {
 namespace session {
 
 namespace {
 
+// 当前题的临时记录跨越“主回答 -> 可选追问 -> 最终评分”多个事件，
+// 只有最终评分完成后才写入 DialogSession，避免报告里出现半条记录。
 struct PendingQuestionAnswer {
     QuestionAnswerRecord record;
     bool waiting_for_follow_up = false;
 };
 
+// 状态切换集中在一个入口，后续接 Qt signal 或状态日志时只需要扩展这里。
 void transitionState(DialogSession& session, InterviewState next_state) {
     session.setState(next_state);
 }
 
+// 所有错误路径执行同一组动作：保存可展示错误、进入终态并关闭外部资源。
+// close() 由接口约定为可重复调用，因此上层清理不必判断失败发生在哪个阶段。
 void failSession(DialogOrchestratorResult& result, services::IRealtimeClient& realtime_client,
                  const std::string& error_message) {
     result.success = false;
@@ -27,6 +35,8 @@ void failSession(DialogOrchestratorResult& result, services::IRealtimeClient& re
     realtime_client.close();
 }
 
+// 只有底层确认发送成功后才记录 interviewer_messages，
+// 这样结果对象表示“实际发出的文本”，而不是“尝试发送的文本”。
 bool sendInterviewerText(DialogOrchestratorResult& result,
                          services::IRealtimeClient& realtime_client, const std::string& text) {
     if (!realtime_client.sendInterviewerText(text)) {
@@ -38,6 +48,7 @@ bool sendInterviewerText(DialogOrchestratorResult& result,
     return true;
 }
 
+// 开始新题时重置 pending_record，防止上一题追问标记或回答泄漏到下一题。
 bool askCurrentQuestion(DialogOrchestratorResult& result,
                         services::IRealtimeClient& realtime_client, InterviewManager& manager,
                         std::size_t question_number, PendingQuestionAnswer& pending_record) {
@@ -63,6 +74,7 @@ bool askCurrentQuestion(DialogOrchestratorResult& result,
     return true;
 }
 
+// 正常结束也先发送结束语，再进入 kCompleted；发送失败仍应落入统一错误收口。
 bool finishSession(DialogOrchestratorResult& result, services::IRealtimeClient& realtime_client) {
     transitionState(result.session, InterviewState::kSessionEnding);
     if (!sendInterviewerText(result, realtime_client, "本次模拟面试结束，正在生成报告。")) {
@@ -75,6 +87,7 @@ bool finishSession(DialogOrchestratorResult& result, services::IRealtimeClient& 
     return true;
 }
 
+// 题目下标只由 InterviewManager 推进，展示用的 question_number 在确认还有下一题后再递增。
 bool moveToNextQuestionOrFinish(DialogOrchestratorResult& result,
                                 services::IRealtimeClient& realtime_client,
                                 InterviewManager& manager, std::size_t& question_number,
@@ -88,6 +101,8 @@ bool moveToNextQuestionOrFinish(DialogOrchestratorResult& result,
     return askCurrentQuestion(result, realtime_client, manager, question_number, pending_record);
 }
 
+// 主回答先写入回答历史并完成首次评分；若触发追问，结构化记录暂不落盘，
+// 等下一条 final transcript 到达后再生成最终评分。
 bool processPrimaryAnswer(DialogOrchestratorResult& result,
                           services::IRealtimeClient& realtime_client, InterviewManager& manager,
                           std::size_t& question_number, PendingQuestionAnswer& pending_record,
@@ -122,6 +137,8 @@ bool processPrimaryAnswer(DialogOrchestratorResult& result,
                                       pending_record);
 }
 
+// 追问评分使用“主回答 + 追问回答”的组合上下文，最终只追加一条题目记录，
+// 保证报告题数仍与实际主问题数量一致。
 bool processFollowUpAnswer(DialogOrchestratorResult& result,
                            services::IRealtimeClient& realtime_client, InterviewManager& manager,
                            std::size_t& question_number, PendingQuestionAnswer& pending_record,
@@ -149,11 +166,13 @@ DialogOrchestrator::DialogOrchestrator(PreparedInterview& prepared_interview,
 DialogOrchestratorResult DialogOrchestrator::run() {
     DialogOrchestratorResult result;
     if (!prepared_interview_.isReady()) {
+        // 准备阶段失败时不尝试连接外部服务，直接复用已经收口好的错误信息。
         failSession(result, realtime_client_, prepared_interview_.getErrorMessage());
         return result;
     }
 
     if (!realtime_client_.connect()) {
+        // connect 返回 false 表示客户端没有建立可用事件流，后续不能继续读取或发送。
         failSession(result, realtime_client_, "realtime 会话连接失败。");
         return result;
     }
@@ -171,6 +190,7 @@ DialogOrchestratorResult DialogOrchestrator::run() {
         switch (event.type) {
         case common::RealtimeEventType::kConnected:
             if (interview_started) {
+                // 重复 connected 不应重复发送欢迎语或第一题，保持状态机幂等。
                 break;
             }
 
@@ -238,6 +258,7 @@ DialogOrchestratorResult DialogOrchestrator::run() {
     }
 
     if (!result.session.isFinished()) {
+        // hasNextEvent() 变为 false 但尚未完成，说明脚本过短或真实连接提前耗尽。
         failSession(result, realtime_client_, "realtime 事件流结束，但面试尚未完成。");
     }
 

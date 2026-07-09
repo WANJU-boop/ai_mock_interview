@@ -13,12 +13,18 @@ namespace services {
 // 单元测试用它覆盖 realtime 主流程，避免默认测试依赖网络、麦克风或服务端账号。
 class MockRealtimeClient final : public IRealtimeClient {
   public:
+    // 脚本按值移入 mock，保证调用方后续修改原 vector 不会改变测试事件序列。
     explicit MockRealtimeClient(std::vector<common::RealtimeEvent> scripted_events);
 
+    // mock connect 不访问网络，只在尚未关闭时切换为可读写状态。
     bool connect() override;
+    // 只有已连接、未关闭且脚本仍有剩余事件时才允许继续消费。
     bool hasNextEvent() const override;
+    // 按顺序返回下一条脚本事件；空读会抛出 std::out_of_range，避免测试静默越界。
     common::RealtimeEvent receiveNextEvent() override;
+    // 记录面试官文本供断言；未连接或已关闭时返回 false。
     bool sendInterviewerText(const std::string& text) override;
+    // 把客户端标记为关闭；允许重复调用，模拟真实实现应提供的幂等清理入口。
     void close() override;
 
     // 读取已发送给 realtime 服务的面试官文本，便于测试确认提问、追问和结束语。

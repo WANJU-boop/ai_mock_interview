@@ -13,7 +13,9 @@ class DialogSession;
 
 // 追问决策结果：说明当前回答是否需要补充追问，以及追问文本。
 struct FollowUpDecision {
+    // false 表示本题可直接落盘最终评分，不再等待额外输入。
     bool needs_follow_up = false;
+    // 只有 needs_follow_up 为 true 时才包含要展示给候选人的追问。
     std::string prompt;
 };
 

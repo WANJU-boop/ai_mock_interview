@@ -7,13 +7,19 @@
 #include <string>
 #include <vector>
 
+// 配置模块把“不可信 JSON 文件”转换成类型稳定的 AppConfig：
+// 1. require/read 辅助函数负责字段存在性、JSON 类型和取值范围。
+// 2. provider 校验负责 HTTPS/WSS、密钥注入方式和当前功能边界。
+// 3. 对外只返回完整可用配置，任何半合法输入都在启动阶段以异常失败。
 namespace interview {
 namespace common {
 
 namespace {
 
+// 默认文件名集中在实现层，避免入口程序各自硬编码并产生不同查找规则。
 const char kDefaultConfigFileName[] = "config.example.json";
 
+// 必填 section 必须存在且是 JSON object；返回 const 引用避免复制整段配置树。
 const nlohmann::json& requireObject(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
         throw std::runtime_error("配置缺少 section：" + key);
@@ -27,6 +33,8 @@ const nlohmann::json& requireObject(const nlohmann::json& parent, const std::str
     return value;
 }
 
+// 必填字符串同时拒绝“缺字段、类型错误、空字符串”三类无效配置。
+// 错误信息带字段名，方便新手直接定位 config.example.json 中的问题。
 std::string requireString(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
         throw std::runtime_error("配置缺少字段：" + key);
@@ -45,6 +53,7 @@ std::string requireString(const nlohmann::json& parent, const std::string& key) 
     return result;
 }
 
+// 可选字符串缺失时用空值表达“功能未配置”；一旦出现，类型仍必须正确。
 std::string readOptionalString(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
         return "";
@@ -58,6 +67,8 @@ std::string readOptionalString(const nlohmann::json& parent, const std::string& 
     return value.get<std::string>();
 }
 
+// 带默认值的可选字符串用于 realtime 配置迁移：
+// 老配置可以省略新字段，但显式写空字符串仍视为配置错误，避免覆盖安全默认值。
 std::string readOptionalStringWithDefault(const nlohmann::json& parent, const std::string& key,
                                           const std::string& default_value) {
     if (!parent.contains(key)) {
@@ -77,6 +88,7 @@ std::string readOptionalStringWithDefault(const nlohmann::json& parent, const st
     return result;
 }
 
+// 题目数和超时都要求为正数；统一校验能避免不同模块对 0 或负数作出不同解释。
 int requirePositiveInt(const nlohmann::json& parent, const std::string& key) {
     if (!parent.contains(key)) {
         throw std::runtime_error("配置缺少字段：" + key);
@@ -95,6 +107,7 @@ int requirePositiveInt(const nlohmann::json& parent, const std::string& key) {
     return result;
 }
 
+// 字段缺失时沿用代码默认值，字段存在时复用严格的正整数校验。
 int readPositiveIntWithDefault(const nlohmann::json& parent, const std::string& key,
                                int default_value) {
     if (!parent.contains(key)) {
@@ -108,6 +121,7 @@ bool startsWith(const std::string& value, const std::string& prefix) {
     return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
 }
 
+// mock provider 不需要网络字段；只有真实 HTTP provider 才强制检查加密传输和密钥来源。
 void validateLlmConfig(const AppConfig& config) {
     if (config.llm.provider != "http") {
         return;
@@ -125,6 +139,8 @@ void validateLlmConfig(const AppConfig& config) {
     }
 }
 
+// realtime 配置在创建 WebSocket 前先完成供应商和安全边界校验，
+// 避免真实密钥读取后才发现 endpoint 或模式根本不受支持。
 void validateRealtimeConfig(const AppConfig& config) {
     if (config.realtime.provider == "mock") {
         return;
@@ -155,6 +171,7 @@ void validateRealtimeConfig(const AppConfig& config) {
     }
 }
 
+// 文件探测使用 error_code 而不是异常，让“候选路径不存在”保持为正常回退条件。
 bool isExistingFile(const std::filesystem::path& path) {
     std::error_code error_code;
     return std::filesystem::exists(path, error_code) &&
@@ -194,6 +211,7 @@ std::string findDefaultConfigPath(const std::string& executable_path) {
 }
 
 AppConfig loadConfigFromFile(const std::string& file_path) {
+    // 文件打开失败和 JSON 解析失败分开报告：前者通常是路径问题，后者是配置内容问题。
     std::ifstream input(file_path);
     if (!input.is_open()) {
         throw std::runtime_error("无法打开配置文件：" + file_path);
@@ -212,6 +230,7 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
 
     AppConfig config;
 
+    // interview 和 llm 是启动主流程必需 section；realtime 则保持可选，兼容只运行 CLI 的旧配置。
     const nlohmann::json& interview = requireObject(root, "interview");
     const nlohmann::json& llm = requireObject(root, "llm");
     config.interview.candidate_name = requireString(interview, "candidate_name");
@@ -247,6 +266,7 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
         config.realtime.timeout_ms = readPositiveIntWithDefault(realtime, "timeout_ms", 30000);
     }
 
+    // 所有字段装配完成后再做跨字段/provider 校验，保证校验函数看到的是完整配置。
     validateLlmConfig(config);
     validateRealtimeConfig(config);
     return config;

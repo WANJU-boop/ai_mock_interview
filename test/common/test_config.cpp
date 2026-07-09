@@ -19,6 +19,8 @@ std::string writeConfigFile(const std::filesystem::path& file_path, const std::s
     return file_path.string();
 }
 
+// 路径查找测试会临时切换进程工作目录；RAII 保证断言失败或异常时也能恢复原目录，
+// 避免一个测试的环境变化污染后续测试。
 class ScopedCurrentPath {
   public:
     explicit ScopedCurrentPath(const std::filesystem::path& path)
@@ -79,6 +81,7 @@ TEST(ConfigTest, ReturnsDefaultConfigFileNameWhenNoFallbackPathExists) {
               "config.example.json");
 }
 
+// 验证最小合法配置能完整加载，并为省略的可选字段填入安全默认值。
 TEST(ConfigTest, LoadsValidConfig) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "valid_config_test.json",
@@ -268,6 +271,7 @@ TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证 interview/llm 这类必需 section 缺失时立即失败，不能返回部分 AppConfig。
 TEST(ConfigTest, ThrowsForMissingConfigSection) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "missing_section_config_test.json",
@@ -282,8 +286,8 @@ TEST(ConfigTest, ThrowsForMissingConfigSection) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证 JSON 根节点必须是对象；合法 JSON 数组仍不符合本项目配置结构。
 TEST(ConfigTest, ThrowsForNonObjectRoot) {
-    // 配置根节点必须是对象；数组虽然是合法 JSON，但不符合本项目配置结构。
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "non_object_root_config_test.json",
                         R"([
@@ -303,8 +307,8 @@ TEST(ConfigTest, ThrowsForNonObjectRoot) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证 section 必须保持对象形状，否则字段读取无法提供明确语义。
 TEST(ConfigTest, ThrowsForNonObjectConfigSection) {
-    // interview 和 llm 这类 section 必须是对象，不能用字符串等简单值替代。
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "non_object_section_config_test.json",
                                                     R"({
@@ -318,6 +322,7 @@ TEST(ConfigTest, ThrowsForNonObjectConfigSection) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证 target_role 等必填字段不能省略，避免错误配置被空值掩盖。
 TEST(ConfigTest, ThrowsForMissingRequiredField) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "missing_field_config_test.json",
@@ -335,6 +340,7 @@ TEST(ConfigTest, ThrowsForMissingRequiredField) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证字段存在但 JSON 类型错误时也会失败，不能依赖隐式字符串/整数转换。
 TEST(ConfigTest, ThrowsForWrongFieldType) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "wrong_type_config_test.json",
@@ -373,6 +379,7 @@ TEST(ConfigTest, ThrowsWhenResumePathHasWrongType) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证必填字符串不能用空值绕过“字段存在”检查，否则欢迎语和 LLM 上下文会失去语义。
 TEST(ConfigTest, ThrowsForEmptyRequiredString) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "empty_string_config_test.json",
@@ -391,6 +398,7 @@ TEST(ConfigTest, ThrowsForEmptyRequiredString) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证题目数必须为正数；0 题无法形成可推进、可完成的面试流程。
 TEST(ConfigTest, ThrowsForInvalidQuestionCount) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "invalid_question_count_config_test.json",
@@ -492,11 +500,13 @@ TEST(ConfigTest, ThrowsWhenTimeoutMsIsNotPositive) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
+// 验证不可读配置文件会抛出明确异常，入口层才能统一转换成启动失败。
 TEST(ConfigTest, ThrowsForMissingConfigFile) {
     EXPECT_THROW(interview::common::loadConfigFromFile("missing_config_file_test.json"),
                  std::runtime_error);
 }
 
+// 验证语法损坏的 JSON 不会被当作默认配置继续运行，防止错误字段静默生效。
 TEST(ConfigTest, ThrowsForMalformedJson) {
     const std::string config_path =
         writeConfigFile(std::filesystem::temp_directory_path() / "malformed_config_test.json",
