@@ -73,14 +73,21 @@ ParsedWssUrl parseWssUrl(const std::string& url) {
 class BeastVolcRealtimeTransport::Impl {
   public:
     using Tcp = boost::asio::ip::tcp;
+    // WebSocket over TLS/SSL over TCP
     using WebSocketStream =
         boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>;
 
+    //每次必须要做的认证
     Impl() : ssl_context_(boost::asio::ssl::context::tls_client) {
         // 使用系统默认证书路径校验证书链。不能为了省事关闭校验，
         // 否则真实 access key 可能被中间人攻击窃取。
         ssl_context_.set_default_verify_paths();
-    }
+    } 
+
+    //三个类里面 private 定义的变量
+    // boost::asio::io_context io_context_;
+    // boost::asio::ssl::context ssl_context_;
+    // std::unique_ptr<WebSocketStream> stream_;
 
     void connect(const VolcRealtimeConnectionRequest& request) {
         namespace asio = boost::asio;
@@ -93,24 +100,35 @@ class BeastVolcRealtimeTransport::Impl {
         // 每次 connect 创建一条新的 websocket stream。
         // 当前实现是同步、单线程的；后续如要接 Qt，需要放到后台线程并用 signal/slot 回主线程。
         stream_ = std::make_unique<WebSocketStream>(io_context_, ssl_context_);
+
+        //打开证书校验  stream_->next_layer() stream_的下一层是ssl  ssl 再下一层是tcp
         stream_->next_layer().set_verify_mode(asio::ssl::verify_peer);
-        // SNI 让服务端知道客户端访问的是哪个 host；很多 TLS 服务没有 SNI 会握手失败。
+
+        //设置SNI  SNI 让服务端知道客户端访问的是哪个 host；很多 TLS 服务没有 SNI 会握手失败。
         if (::SSL_set_tlsext_host_name(stream_->next_layer().native_handle(),
                                        parsed_url.host.c_str()) != 1) {
             throw std::runtime_error("设置火山 realtime TLS SNI 失败。");
         }
 
         Tcp::resolver resolver(io_context_);
+
         // Beast 的 tcp_stream 支持超时；这里给 DNS/connect/TLS 前的底层连接设置统一超时。
         beast::get_lowest_layer(*stream_).expires_after(timeout);
+        //解析DNS  endpoints 就是解析后的连接点
         const Tcp::resolver::results_type endpoints =
             resolver.resolve(parsed_url.host, parsed_url.port);
+
+        //链接
         beast::get_lowest_layer(*stream_).connect(endpoints);
 
         // TCP 连接成功后先做 TLS 握手，再做 WebSocket 握手。
         stream_->next_layer().handshake(asio::ssl::stream_base::client);
+
         beast::get_lowest_layer(*stream_).expires_never();
-        stream_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
+        //WebSocket 设置
+        stream_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::client)); //超时策略
+
+        //设置header
         stream_->set_option(websocket::stream_base::decorator(
             [&request](websocket::request_type& websocket_request) {
                 // decorator 在 WebSocket 握手请求发出前运行，用于写入鉴权 header。
@@ -122,9 +140,11 @@ class BeastVolcRealtimeTransport::Impl {
                 }
             }));
 
+        //WebSocket 握手
         stream_->handshake(parsed_url.host, parsed_url.target);
     }
 
+    //发送二进制 WebSocket message。
     void sendBinary(const std::vector<std::uint8_t>& bytes) {
         ensureConnected();
         // 火山 realtime 使用 WebSocket binary message 承载私有二进制 frame。
@@ -133,6 +153,7 @@ class BeastVolcRealtimeTransport::Impl {
         stream_->write(boost::asio::buffer(bytes));
     }
 
+    
     std::vector<std::uint8_t> receiveBinary() {
         ensureConnected();
         // read 会阻塞直到收到一个完整 WebSocket message。

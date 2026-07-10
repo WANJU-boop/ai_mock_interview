@@ -20,23 +20,23 @@ int main(int argc, char* argv[]) {
         argc > 1 ? argv[1] : interview::common::findDefaultConfigPath(argv[0]);
 
     try {
-        const interview::common::AppConfig config =
-            interview::common::loadConfigFromFile(config_path);
-        std::unique_ptr<interview::services::ILlmClient> llm_client =
-            interview::services::createLlmClient(config.llm);
+        const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+        std::unique_ptr<interview::services::ILlmClient> llm_client = interview::services::createLlmClient(config.llm);
+
         interview::services::PodofoPdfParser pdf_parser;
-        interview::session::PreparedInterview prepared_interview =
-            interview::session::prepareInterview(config.interview, *llm_client, pdf_parser);
+
+        interview::session::PreparedInterview prepared_interview = interview::session::prepareInterview(config.interview, *llm_client, pdf_parser);
 
         std::vector<interview::common::RealtimeEvent> scripted_events;
+
         if (prepared_interview.isReady() && config.realtime.provider == "mock") {
             // 题目数量来自已经准备好的 InterviewManager，确保 demo 脚本和真实题目流一致。
             scripted_events = interview::app::buildDefaultRealtimeDemoScript(
                 prepared_interview.getManager().getQuestionCount());
         }
 
-        std::unique_ptr<interview::services::IRealtimeClient> realtime_client =
-            interview::services::createRealtimeClient(config.realtime, scripted_events);
+        std::unique_ptr<interview::services::IRealtimeClient> realtime_client = interview::services::createRealtimeClient(config.realtime, scripted_events);
         if (config.realtime.provider == "mock") {
             return interview::app::runConfiguredRealtimeInterview(
                 std::cout, prepared_interview, *realtime_client, config.realtime.provider);

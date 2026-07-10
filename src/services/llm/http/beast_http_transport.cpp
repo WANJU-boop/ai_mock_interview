@@ -120,6 +120,7 @@ HttpResponse BeastHttpTransport::postJson(const HttpRequest& request) {
 
     // verify_peer 要求校验证书链，避免连接到伪造服务器。
     stream.set_verify_mode(asio::ssl::verify_peer);
+
     setSniHostname(stream,
                    parsed_url.host); // 设置SNI 说明你要访问的域名是什么 因为现在同个IP有很多域名
 
@@ -128,8 +129,10 @@ HttpResponse BeastHttpTransport::postJson(const HttpRequest& request) {
     //  等同步操作。
     beast::get_lowest_layer(stream).expires_after(
         timeout); // 设置超时，get_lowest_layer(stream)表示从TLS流中得到TCP流
+        
     const tcp::resolver::results_type endpoints =
         resolver.resolve(parsed_url.host, parsed_url.port); // DNS解析
+
     beast::get_lowest_layer(stream).connect(endpoints);     // TCP链接域名DNS解析后的IP
 
     // 2.TCP 连通后再做 TLS 客户端握手，握手成功才说明加密通道已经建立。
