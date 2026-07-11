@@ -71,6 +71,9 @@ interview::services::VolcRealtimeRuntimeConfig makeConfig() {
     config.tts_audio_format = "pcm_s16le";
     config.tts_sample_rate_hz = 24000;
     config.tts_channels = 1;
+    config.capture_sample_rate_hz = 16000;
+    config.capture_channels = 1;
+    config.frames_per_buffer = 320;
     config.timeout_ms = 12000;
     return config;
 }
@@ -130,15 +133,15 @@ TEST(VolcRealtimeClientTest, ConnectBuildsRequiredWebSocketHeaders) {
     EXPECT_EQ(findHeaderValue(transport->last_request.headers, "X-Api-Connect-Id"), "connect-001");
 }
 
-// 验证 StartConnection 和 StartSession 会按火山事件 ID 顺序发送，StartSession 固定使用 text 模式。
-TEST(VolcRealtimeClientTest, SendsStartConnectionAndTextSessionEvents) {
+// 验证 StartConnection 和 StartSession 会按火山事件 ID 顺序发送，StartSession 使用配置的输入模式。
+TEST(VolcRealtimeClientTest, SendsStartConnectionAndSessionEvents) {
     const std::shared_ptr<FakeVolcRealtimeTransport> transport =
         std::make_shared<FakeVolcRealtimeTransport>();
     interview::services::VolcRealtimeClient client(makeConfig(), transport);
 
     client.connect();
     client.startConnection();
-    client.startTextSession();
+    client.startSession();
 
     ASSERT_EQ(transport->sent_frames.size(), 2u);
     const interview::services::VolcRealtimeFrame start_connection =
@@ -158,6 +161,38 @@ TEST(VolcRealtimeClientTest, SendsStartConnectionAndTextSessionEvents) {
     EXPECT_NE(payload.find(R"("format":"pcm_s16le")"), std::string::npos);
     EXPECT_NE(payload.find(R"("sample_rate":24000)"), std::string::npos);
     EXPECT_NE(payload.find(R"("strict_audit":true)"), std::string::npos);
+}
+
+// 验证 audio 模式把 PCM 作为 raw sequence frame 发送。协议层不在 payload 前插 JSON，
+// 否则服务端 ASR 无法按采样值解析候选人声音。
+TEST(VolcRealtimeClientTest, SendsAudioPcmAsRawSequenceFrame) {
+    const std::shared_ptr<FakeVolcRealtimeTransport> transport =
+        std::make_shared<FakeVolcRealtimeTransport>();
+    interview::services::VolcRealtimeRuntimeConfig config = makeConfig();
+    config.input_mod = "audio";
+    interview::services::VolcRealtimeClient client(config, transport);
+
+    client.connect();
+    client.sendAudioPcm({0x01, 0x00, 0xFE, 0xFF});
+
+    ASSERT_EQ(transport->sent_frames.size(), 1u);
+    const interview::services::VolcRealtimeFrame frame =
+        interview::services::decodeVolcRealtimeFrame(transport->sent_frames.front());
+    EXPECT_EQ(frame.message_type, interview::services::VolcRealtimeMessageType::kAudioOnlyRequest);
+    EXPECT_EQ(frame.flag, interview::services::VolcRealtimeMessageFlag::kPositiveSequence);
+    EXPECT_EQ(frame.serialization, interview::services::VolcRealtimeSerialization::kRaw);
+    ASSERT_TRUE(frame.sequence.has_value());
+    EXPECT_EQ(*frame.sequence, 1);
+    EXPECT_EQ(frame.payload, (std::vector<std::uint8_t>{0x01, 0x00, 0xFE, 0xFF}));
+}
+
+// 验证 text 模式不会接受 PCM。输入模式错误要在本地失败，而不是把协议错误包送到服务端。
+TEST(VolcRealtimeClientTest, RejectsAudioPcmOutsideAudioMode) {
+    const std::shared_ptr<FakeVolcRealtimeTransport> transport =
+        std::make_shared<FakeVolcRealtimeTransport>();
+    interview::services::VolcRealtimeClient client(makeConfig(), transport);
+
+    EXPECT_THROW(client.sendAudioPcm({0x01, 0x00}), std::runtime_error);
 }
 
 // 验证文本 query 会发送 ChatTextQuery，并读取到 ChatEnded 为止，形成文本模式的最小收发闭环。

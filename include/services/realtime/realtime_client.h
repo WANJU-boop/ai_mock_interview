@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/realtime_protocol.h"
+#include "services/audio/audio_device.h"
 
 #include <string>
 
@@ -23,6 +24,10 @@ class IRealtimeClient {
 
     // 发送面试官文本；后续真实实现会把它转成 TTS 或服务端 response 指令。
     virtual bool sendInterviewerText(const std::string& text) = 0;
+
+    // 发送候选人的一块完整 PCM。调用方必须在唯一 realtime worker 中调用，
+    // 不能从 PortAudio callback 直接触碰 WebSocket，避免多个线程并发读写同一连接。
+    virtual bool sendCandidateAudio(const AudioPcmChunk& chunk) = 0;
 
     // 主动关闭 realtime 会话，确保后续 WebSocket 实现有明确的停止入口。
     virtual void close() = 0;

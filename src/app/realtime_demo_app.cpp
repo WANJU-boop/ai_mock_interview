@@ -55,7 +55,8 @@ int runRealtimeDemoInterview(std::ostream& output, session::PreparedInterview& p
 int runConfiguredRealtimeInterview(std::ostream& output,
                                    session::PreparedInterview& prepared_interview,
                                    services::IRealtimeClient& realtime_client,
-                                   const std::string& provider_name) {
+                                   const std::string& provider_name,
+                                   session::RealtimeAudioBridge* audio_bridge) {
     output << "=== Realtime " << provider_name << " Demo ===\n";
     if (!prepared_interview.isReady()) {
         output << prepared_interview.getErrorMessage() << '\n';
@@ -65,7 +66,9 @@ int runConfiguredRealtimeInterview(std::ostream& output,
     // 这里通过 IRealtimeClient 抽象启动编排层：
     // mock provider 会读确定性脚本；火山 provider 会在 connect() 里建立真实 WSS。
     // 未来接入音频时，app 层仍不需要知道麦克风、TTS 或供应商 frame 的细节。
-    session::DialogOrchestrator orchestrator(prepared_interview, realtime_client);
+    // audio_bridge 为空时保持 mock/text 的旧行为；audio 模式由入口显式构造并交给同一个
+    // synchronous worker，确保 app 层不直接调用 PortAudio 或 websocket 细节。
+    session::DialogOrchestrator orchestrator(prepared_interview, realtime_client, audio_bridge);
     const session::DialogOrchestratorResult result = orchestrator.run();
 
     printInterviewerMessages(result.interviewer_messages, output);

@@ -8,6 +8,7 @@ add_executable(Project_test
     common/test_logger.cpp
     common/test_realtime_protocol.cpp
     services/test_audio_device.cpp
+    services/test_pcm_sample_queue.cpp
     services/test_http_llm_client.cpp
     services/test_llm_client.cpp
     services/test_llm_client_factory.cpp
@@ -22,6 +23,7 @@ add_executable(Project_test
     session/test_interview_manager.cpp
     session/test_interview_report.cpp
     session/test_interview_setup.cpp
+    session/test_realtime_audio_bridge.cpp
 )
 
 target_link_libraries(Project_test

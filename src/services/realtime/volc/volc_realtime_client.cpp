@@ -16,10 +16,14 @@ std::vector<std::uint8_t> toBytes(const std::string& text) {
 }
 
 nlohmann::json buildStartSessionPayload(const VolcRealtimeRuntimeConfig& config) {
-    // 文本模式仍然显式传 asr.extra / tts.extra 空对象，避免服务端把 null 配置视为坏请求。
-    // 这里同时保留 TTS audio_config，是因为即使
-    // input_mod=text，服务端仍可能需要知道面试官文本如何合成语音。
-    return {{"asr", {{"extra", nlohmann::json::object()}}},
+    // 无论文本还是 audio 模式，都显式传 ASR/TTS 的 PCM 约定，避免服务端用默认采样率解释音频。
+    // input_mod=text 时 ASR audio_config 暂不消费，但保留同一配置形状可避免两种模式长期漂移。
+    return {{"asr",
+             {{"extra", nlohmann::json::object()},
+              {"audio_config",
+               {{"channel", config.capture_channels},
+                {"format", "pcm_s16le"},
+                {"sample_rate", config.capture_sample_rate_hz}}}}},
             {"dialog",
              {{"extra",
                {{"input_mod", config.input_mod},
@@ -78,7 +82,7 @@ void VolcRealtimeClient::startConnection() {
     sendJsonEvent(VolcRealtimeEventId::kStartConnection, "{}");
 }
 
-void VolcRealtimeClient::startTextSession() {
+void VolcRealtimeClient::startSession() {
     // StartSession 是会话级事件，sendJsonEvent 会自动带上 config_.session_id。
     sendJsonEvent(VolcRealtimeEventId::kStartSession, buildStartSessionPayload(config_).dump());
 }
@@ -114,6 +118,27 @@ void VolcRealtimeClient::sendTextQuery(const std::string& content) {
     }
 
     sendJsonEvent(VolcRealtimeEventId::kChatTextQuery, buildTextQueryPayload(content));
+}
+
+void VolcRealtimeClient::sendAudioPcm(const std::vector<std::uint8_t>& pcm_s16le) {
+    if (config_.input_mod != "audio") {
+        throw std::runtime_error("只有 audio 模式可以发送候选人 PCM。");
+    }
+    if (pcm_s16le.empty() || pcm_s16le.size() % 2 != 0) {
+        // s16le 每个采样恰好两个字节。奇数字节说明上游 PCM 块已经损坏，不能交给服务端猜测。
+        throw std::runtime_error("候选人 PCM 必须是非空且字节数为偶数的 s16le 数据。");
+    }
+
+    // 音频包不是 JSON 事件：optional 区域只携带 sequence，payload 是原始 PCM。
+    // session 已由 StartSession 绑定到当前 WebSocket，因此这里遵从既有 sequence-frame 编解码规则。
+    VolcRealtimeFrame frame;
+    frame.message_type = VolcRealtimeMessageType::kAudioOnlyRequest;
+    frame.flag = VolcRealtimeMessageFlag::kPositiveSequence;
+    frame.serialization = VolcRealtimeSerialization::kRaw;
+    frame.compression = VolcRealtimeCompression::kNone;
+    frame.sequence = next_audio_sequence_++;
+    frame.payload = pcm_s16le;
+    transport_->sendBinary(encodeVolcRealtimeFrame(frame));
 }
 
 VolcRealtimeFrame VolcRealtimeClient::receiveFrame() {
@@ -200,10 +225,8 @@ void VolcRealtimeClient::validateConfig() const {
     if (config_.model.empty()) {
         throw std::runtime_error("火山 realtime model 不能为空。");
     }
-    if (config_.input_mod != "text") {
-        // 当前阶段只实现文本模式。audio 模式会涉及麦克风采集、音频编码、TaskRequest 流式发送，
-        // 必须等 IAudioDevice/PortAudio 阶段完成后再打开。
-        throw std::runtime_error("当前 VolcRealtimeClient 只实现 input_mod=text 文本模式。");
+    if (config_.input_mod != "text" && config_.input_mod != "audio") {
+        throw std::runtime_error("火山 realtime input_mod 只能是 text 或 audio。");
     }
     if (config_.speaker.empty()) {
         throw std::runtime_error("火山 realtime speaker 不能为空。");
@@ -213,6 +236,10 @@ void VolcRealtimeClient::validateConfig() const {
     }
     if (config_.tts_sample_rate_hz <= 0 || config_.tts_channels <= 0) {
         throw std::runtime_error("火山 realtime TTS sample rate 和 channels 必须是正数。");
+    }
+    if (config_.capture_sample_rate_hz <= 0 || config_.capture_channels <= 0 ||
+        config_.frames_per_buffer <= 0) {
+        throw std::runtime_error("火山 realtime capture PCM 配置必须是正数。");
     }
     if (config_.timeout_ms <= 0) {
         throw std::runtime_error("火山 realtime timeout_ms 必须是正数。");

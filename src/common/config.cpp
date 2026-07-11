@@ -183,7 +183,7 @@ void validateRealtimeConfig(const AppConfig& config) {
     // 真实 realtime provider 的安全边界在配置层先检查：
     // 1. endpoint 必须是加密 WSS
     // 2. 配置文件只保存环境变量名
-    // 3. 当前阶段只允许 text 模式，避免误以为音频链路已经完成。
+    // 3. input_mod 只能选择已实现的 text/audio 两种模式，音频模式还会校验本地 PCM 约定。
     if (config.realtime.connection.endpoint.empty()) {
         throw std::runtime_error("volc realtime 要求 realtime.connection.endpoint 不能为空");
     }
@@ -196,9 +196,14 @@ void validateRealtimeConfig(const AppConfig& config) {
     if (config.realtime.connection.access_key_env.empty()) {
         throw std::runtime_error("volc realtime 要求 realtime.connection.access_key_env 不能为空");
     }
-    if (config.realtime.dialog.input_mod != "text") {
-        throw std::runtime_error(
-            "当前阶段只支持 realtime.dialog.input_mod=text，audio 模式留到音频模块");
+    if (config.realtime.dialog.input_mod != "text" && config.realtime.dialog.input_mod != "audio") {
+        throw std::runtime_error("realtime.dialog.input_mod 只能是 text 或 audio");
+    }
+    if (config.realtime.dialog.input_mod == "audio" &&
+        config.realtime.tts.audio_format != "pcm_s16le") {
+        // 当前播放器和火山 audio frame 都以 signed 16-bit little-endian PCM 为唯一实现约定。
+        // 不静默转换未知格式，避免语音内容被错误解码却表面上“播放成功”。
+        throw std::runtime_error("audio 模式当前要求 realtime.tts.audio_format=pcm_s16le");
     }
     if (config.realtime.tts.audio_format.empty()) {
         throw std::runtime_error("volc realtime 要求 realtime.tts.audio_format 不能为空");

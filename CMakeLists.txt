@@ -19,6 +19,7 @@ find_package(openssl CONFIG REQUIRED)
 find_package(boost_asio CONFIG REQUIRED)
 find_package(boost_beast CONFIG REQUIRED)
 find_package(boost_system CONFIG REQUIRED)
+find_package(portaudio CONFIG REQUIRED)
 find_package(podofo CONFIG REQUIRED)
 
 
@@ -48,6 +49,7 @@ target_link_libraries(common_lib
 # service 模块转成库
 # =========================
 add_library(services_lib
+    src/services/audio/portaudio/portaudio_audio_device.cpp
     src/services/audio/mock/fake_audio_device.cpp
     src/services/llm/http/beast_http_transport.cpp
     src/services/llm/http/http_llm_client.cpp
@@ -78,6 +80,7 @@ target_link_libraries(services_lib
         Boost::asio
         Boost::beast
         Boost::system
+        portaudio_static
         podofo::podofo
 )
 
@@ -91,6 +94,7 @@ add_library(session_lib
     src/session/interview_manager.cpp
     src/session/interview_report.cpp
     src/session/interview_setup.cpp
+    src/session/realtime_audio_bridge.cpp
 )
 
 target_include_directories(session_lib
@@ -101,6 +105,7 @@ target_include_directories(session_lib
 target_link_libraries(session_lib
     PRIVATE
         common_lib
+        services_lib
     PUBLIC
         nlohmann_json::nlohmann_json
 )

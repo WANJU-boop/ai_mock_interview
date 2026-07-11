@@ -119,6 +119,9 @@ TEST(RealtimeClientFactoryTest, ResolvesCompleteVolcRuntimeConfig) {
     config.tts.audio_format = "pcm_s16le";
     config.tts.sample_rate_hz = 16000;
     config.tts.channels = 2;
+    config.audio.capture_sample_rate_hz = 48000;
+    config.audio.capture_channels = 2;
+    config.audio.frames_per_buffer = 960;
     const ScopedEnv app_id(config.connection.app_id_env, "fake-app-id");
     const ScopedEnv access_key(config.connection.access_key_env, "fake-access-key");
 
@@ -138,6 +141,9 @@ TEST(RealtimeClientFactoryTest, ResolvesCompleteVolcRuntimeConfig) {
     EXPECT_EQ(runtime.tts_audio_format, "pcm_s16le");
     EXPECT_EQ(runtime.tts_sample_rate_hz, 16000);
     EXPECT_EQ(runtime.tts_channels, 2);
+    EXPECT_EQ(runtime.capture_sample_rate_hz, 48000);
+    EXPECT_EQ(runtime.capture_channels, 2);
+    EXPECT_EQ(runtime.frames_per_buffer, 960);
     EXPECT_EQ(runtime.timeout_ms, 45000);
     EXPECT_EQ(runtime.connect_id.rfind("connect-", 0), 0u);
     EXPECT_EQ(runtime.session_id.rfind("session-", 0), 0u);

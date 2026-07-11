@@ -32,6 +32,10 @@ struct VolcRealtimeRuntimeConfig {
     std::string tts_audio_format;
     int tts_sample_rate_hz = 0;
     int tts_channels = 0;
+    // ASR 输入格式来自 realtime.audio；它只描述 PCM，不包含具体 PortAudio 设备 ID。
+    int capture_sample_rate_hz = 0;
+    int capture_channels = 0;
+    int frames_per_buffer = 0;
     // 统一传给底层同步 transport，0 表示运行时配置尚未完整解析。
     int timeout_ms = 0;
 };

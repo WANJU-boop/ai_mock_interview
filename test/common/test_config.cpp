@@ -302,8 +302,8 @@ TEST(ConfigTest, ThrowsWhenVolcRealtimeEndpointIsNotSecure) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
-// 验证当前阶段不会误开 audio 模式；音频输入要等 PortAudio 边界完成后再接。
-TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
+// 验证 audio 模式在 PortAudio/PCM 边界完成后可以加载，入口层才能据此选择真实音频主链路。
+TEST(ConfigTest, LoadsVolcRealtimeAudioMode) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "invalid_volc_audio_mode_test.json",
                                                     R"({
@@ -320,6 +320,37 @@ TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
                 "provider": "volc",
                 "dialog": {
                     "input_mod": "audio"
+                }
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.realtime.dialog.input_mod, "audio");
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 16000);
+}
+
+// 验证 audio 模式不接受未知 TTS 格式。当前播放器只实现 pcm_s16le，静默接收其它格式会播出错误音频。
+TEST(ConfigTest, ThrowsWhenAudioModeUsesUnsupportedTtsFormat) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_audio_tts_format_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "dialog": {
+                    "input_mod": "audio"
+                },
+                "tts": {
+                    "audio_format": "mp3"
                 }
             }
         })");

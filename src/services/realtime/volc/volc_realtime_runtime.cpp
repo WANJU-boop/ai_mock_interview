@@ -52,6 +52,9 @@ VolcRealtimeRuntimeConfig resolveVolcRealtimeRuntimeConfig(const common::Realtim
     runtime.tts_audio_format = config.tts.audio_format;
     runtime.tts_sample_rate_hz = config.tts.sample_rate_hz;
     runtime.tts_channels = config.tts.channels;
+    runtime.capture_sample_rate_hz = config.audio.capture_sample_rate_hz;
+    runtime.capture_channels = config.audio.capture_channels;
+    runtime.frames_per_buffer = config.audio.frames_per_buffer;
     runtime.timeout_ms = config.connection.timeout_ms;
     return runtime;
 }

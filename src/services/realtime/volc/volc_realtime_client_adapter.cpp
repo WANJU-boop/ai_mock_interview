@@ -1,5 +1,6 @@
 #include "services/realtime/volc/volc_realtime_client_adapter.h"
 
+#include <cstdint>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
@@ -32,6 +33,18 @@ common::RealtimeEvent makeErrorEvent(const std::string& message) {
     event.type = common::RealtimeEventType::kError;
     event.error_message = message;
     return event;
+}
+
+std::vector<std::uint8_t> toLittleEndianPcmBytes(const AudioPcmChunk& chunk) {
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(chunk.samples.size() * 2);
+    for (const std::int16_t sample : chunk.samples) {
+        const std::uint16_t unsigned_sample = static_cast<std::uint16_t>(sample);
+        // 显式按小端拆分，不能依赖运行机器的整数内存布局。
+        bytes.push_back(static_cast<std::uint8_t>(unsigned_sample & 0xFF));
+        bytes.push_back(static_cast<std::uint8_t>((unsigned_sample >> 8) & 0xFF));
+    }
+    return bytes;
 }
 
 nlohmann::json parsePayloadJson(const VolcRealtimeFrame& frame) {
@@ -158,11 +171,11 @@ bool VolcRealtimeClientAdapter::connect() {
     try {
         // adapter 对外只有一个 connect()，内部负责完成火山要求的两段式启动：
         // 1. WebSocket + StartConnection
-        // 2. StartSession(input_mod=text)
+        // 2. StartSession(input_mod=text 或 audio)
         client_.connect();
         client_.startConnection();
         client_.receiveUntilEvent(VolcRealtimeEventId::kConnectionStarted);
-        client_.startTextSession();
+        client_.startSession();
         client_.receiveUntilEvent(VolcRealtimeEventId::kSessionStarted);
         connected_ = true;
         closed_ = false;
@@ -213,6 +226,21 @@ bool VolcRealtimeClientAdapter::sendInterviewerText(const std::string& text) {
         // 项目内部接口叫“发送面试官文本”，火山实现需要转成 ChatTTSText。
         // 这里隐藏供应商事件名，让 session 层不依赖火山协议。
         client_.sendChatTtsText(text);
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool VolcRealtimeClientAdapter::sendCandidateAudio(const AudioPcmChunk& chunk) {
+    if (!connected_ || closed_ || chunk.samples.empty()) {
+        return false;
+    }
+
+    try {
+        // 此方法必须由拥有 adapter 的 realtime worker 调用；PortAudio callback
+        // 只负责把样本放进队列。
+        client_.sendAudioPcm(toLittleEndianPcmBytes(chunk));
         return true;
     } catch (const std::exception&) {
         return false;

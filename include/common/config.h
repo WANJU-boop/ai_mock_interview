@@ -49,7 +49,7 @@ struct RealtimeConnectionConfig {
 struct RealtimeDialogConfig {
     // 火山模型版本可由本地配置覆盖，切换模型不需要修改协议代码。
     std::string model = "1.2.1.1";
-    // 当前项目还没有音频边界，先只允许 text 模式；audio 模式等 PortAudio 阶段再打开。
+    // text 使用键盘/文本输入；audio 启动 PortAudio 采集并把 PCM 块流式送给 ASR。
     std::string input_mod = "text";
     // 审核和联网搜索是供应商会话选项，集中配置后不再隐藏在 JSON payload 构造代码里。
     bool strict_audit = true;

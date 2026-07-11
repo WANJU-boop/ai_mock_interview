@@ -32,6 +32,8 @@ class VolcRealtimeClientAdapter final : public IRealtimeClient {
     common::RealtimeEvent receiveNextEvent() override;
     // 发送面试官文本，内部转成火山 ChatTTSText。
     bool sendInterviewerText(const std::string& text) override;
+    // 把设备无关的 int16 PCM 编码成小端字节，再转成火山 AudioOnlyRequest。
+    bool sendCandidateAudio(const AudioPcmChunk& chunk) override;
     // 收口 session、connection 和底层 WebSocket；关闭阶段尽量不再向上抛异常。
     void close() override;
 

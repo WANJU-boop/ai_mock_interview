@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
         client.connect();
         client.startConnection();
         client.receiveUntilEvent(interview::services::VolcRealtimeEventId::kConnectionStarted);
-        client.startTextSession();
+        client.startSession();
         client.receiveUntilEvent(interview::services::VolcRealtimeEventId::kSessionStarted);
         client.sendTextQuery(query);
 

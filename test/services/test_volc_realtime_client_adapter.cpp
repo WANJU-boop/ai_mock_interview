@@ -69,6 +69,9 @@ interview::services::VolcRealtimeRuntimeConfig makeConfig() {
     config.tts_audio_format = "pcm_s16le";
     config.tts_sample_rate_hz = 24000;
     config.tts_channels = 1;
+    config.capture_sample_rate_hz = 16000;
+    config.capture_channels = 1;
+    config.frames_per_buffer = 320;
     config.timeout_ms = 12000;
     return config;
 }
@@ -161,7 +164,7 @@ TEST(VolcRealtimeClientAdapterTest, ConnectStartsVolcConnectionAndExposesConnect
         // connect() 内部会等待 ConnectionStarted。
         makeServerEvent(interview::services::VolcRealtimeEventId::kConnectionStarted));
     transport->incoming_frames.push_back(
-        // startTextSession() 后会等待 SessionStarted。
+        // startSession() 后会等待 SessionStarted。
         makeServerEvent(interview::services::VolcRealtimeEventId::kSessionStarted));
     interview::services::VolcRealtimeClientAdapter adapter(makeConfig(), transport);
 
@@ -202,6 +205,30 @@ TEST(VolcRealtimeClientAdapterTest, SendInterviewerTextUsesChatTtsTextFrames) {
         std::string::npos);
     EXPECT_NE(std::string(end_tts.payload.begin(), end_tts.payload.end()).find(R"("end":true)"),
               std::string::npos);
+}
+
+// 验证 adapter 显式把 int16 采样编码为 little-endian raw audio frame，
+// 业务层不需要了解火山 sequence 编号或二进制 header。
+TEST(VolcRealtimeClientAdapterTest, SendsCandidateAudioAsLittleEndianPcm) {
+    const std::shared_ptr<FakeVolcRealtimeTransport> transport =
+        std::make_shared<FakeVolcRealtimeTransport>();
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kConnectionStarted));
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kSessionStarted));
+    interview::services::VolcRealtimeRuntimeConfig config = makeConfig();
+    config.input_mod = "audio";
+    interview::services::VolcRealtimeClientAdapter adapter(config, transport);
+    interview::services::AudioPcmChunk chunk;
+    chunk.samples = {1, -2};
+
+    ASSERT_TRUE(adapter.connect());
+    ASSERT_TRUE(adapter.sendCandidateAudio(chunk));
+
+    ASSERT_EQ(transport->sent_frames.size(), 3u);
+    const interview::services::VolcRealtimeFrame frame = decodeSentFrame(transport, 2);
+    EXPECT_EQ(frame.message_type, interview::services::VolcRealtimeMessageType::kAudioOnlyRequest);
+    EXPECT_EQ(frame.payload, (std::vector<std::uint8_t>{0x01, 0x00, 0xFE, 0xFF}));
 }
 
 // 验证 adapter 能持续读取火山 frame，并在 SessionFinished 后关闭内部事件流。
