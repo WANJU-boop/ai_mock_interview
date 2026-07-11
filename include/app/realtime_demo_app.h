@@ -23,10 +23,11 @@ int runConfiguredRealtimeInterview(std::ostream& output,
                                    session::PreparedInterview& prepared_interview,
                                    services::IRealtimeClient& realtime_client,
                                    const std::string& provider_name,
-                                   session::RealtimeAudioBridge* audio_bridge = nullptr);
+                                   session::RealtimeAudioBridge* audio_bridge = nullptr,
+                                   const std::string& report_output_directory = "");
 
 // 对真实 provider 做最小连接检查，不进入完整面试循环。
-// 当前火山 provider 还没有接麦克风输入，完整循环会等待 transcript，因此先用 smoke test 收口。
+// text provider 仍只做连接检查；audio provider 会通过 RealtimeAudioBridge 进入完整面试循环。
 int runRealtimeConnectionSmoke(std::ostream& output, services::IRealtimeClient& realtime_client,
                                const std::string& provider_name);
 

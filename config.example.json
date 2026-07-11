@@ -10,7 +10,12 @@
     "model": "mock-interviewer",
     "base_url": "https://api.openai.com/v1",
     "api_key_env": "OPENAI_API_KEY",
-    "timeout_ms": 30000
+    "timeout_ms": 30000,
+    "max_prompt_context_chars": 8000
+  },
+  "report": {
+    "save_json": true,
+    "output_directory": "reports"
   },
   "realtime": {
     "provider": "mock",

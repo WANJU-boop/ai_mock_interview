@@ -29,6 +29,16 @@ struct LlmConfig {
     std::string api_key_env;
     // 超时统一用毫秒表示，后续真实网络实现和手动集成都复用这一个字段。
     int timeout_ms = 30000;
+    // 简历上下文进入 LLM 前的最大字符数。限制输入规模，避免超长 PDF 把请求、成本和隐私暴露面放大。
+    int max_prompt_context_chars = 8000;
+};
+
+// 报告导出配置只描述本地文件策略，不保存候选人正文或任何运行时文件句柄。
+struct ReportConfig {
+    // 默认保存结构化 JSON，最终报告仍由用户本地目录持有，不会上传到外部服务。
+    bool save_json = true;
+    // 文件名在运行时按时间和序号生成，不使用候选人姓名，避免把个人信息带进文件路径。
+    std::string output_directory = "reports";
 };
 
 // Realtime 连接和鉴权来源。这里只保存环境变量名，不保存解析后的真实密钥。
@@ -93,6 +103,7 @@ struct AppConfig {
     // 三个子配置按模块边界保存，入口层只把对应部分传给各自 factory/setup。
     InterviewConfig interview;
     LlmConfig llm;
+    ReportConfig report;
     RealtimeConfig realtime;
 };
 

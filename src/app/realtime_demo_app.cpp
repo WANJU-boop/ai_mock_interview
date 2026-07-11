@@ -5,6 +5,8 @@
 #include "session/dialog_orchestrator.h"
 #include "session/interview_report.h"
 
+#include <exception>
+#include <filesystem>
 #include <string>
 
 namespace interview {
@@ -32,6 +34,26 @@ void printInterviewerMessages(const std::vector<std::string>& messages, std::ost
     }
 }
 
+// realtime 和 CLI 共用同一个 session 报告格式；这里只负责把成功结果保存到本地，
+// 不把候选人正文写入日志或返回给外部服务。
+bool exportReportIfConfigured(const session::DialogSession& interview_session,
+                              const std::string& output_directory, std::ostream& output) {
+    if (output_directory.empty()) {
+        return true;
+    }
+
+    try {
+        const std::filesystem::path report_path =
+            session::createInterviewReportPath(output_directory);
+        session::saveInterviewReportJson(interview_session, report_path);
+        output << "报告已保存到：" << report_path.string() << '\n';
+        return true;
+    } catch (const std::exception& error) {
+        output << "报告导出失败：" << error.what() << '\n';
+        return false;
+    }
+}
+
 } // namespace
 
 std::vector<common::RealtimeEvent> buildDefaultRealtimeDemoScript(std::size_t question_count) {
@@ -56,7 +78,8 @@ int runConfiguredRealtimeInterview(std::ostream& output,
                                    session::PreparedInterview& prepared_interview,
                                    services::IRealtimeClient& realtime_client,
                                    const std::string& provider_name,
-                                   session::RealtimeAudioBridge* audio_bridge) {
+                                   session::RealtimeAudioBridge* audio_bridge,
+                                   const std::string& report_output_directory) {
     output << "=== Realtime " << provider_name << " Demo ===\n";
     if (!prepared_interview.isReady()) {
         output << prepared_interview.getErrorMessage() << '\n';
@@ -80,6 +103,9 @@ int runConfiguredRealtimeInterview(std::ostream& output,
     const nlohmann::json report = session::buildInterviewReportJson(result.session);
     output << "\n=== Realtime " << provider_name << " 报告 JSON ===\n";
     output << report.dump(2) << '\n';
+    if (!exportReportIfConfigured(result.session, report_output_directory, output)) {
+        return 1;
+    }
     output << "Realtime " << provider_name << " 面试完成。\n";
     return 0;
 }

@@ -167,6 +167,9 @@ void validateLlmConfig(const AppConfig& config) {
     if (config.llm.api_key_env.empty()) {
         throw std::runtime_error("HTTP provider 要求 llm.api_key_env 不能为空");
     }
+    if (config.llm.max_prompt_context_chars <= 0) {
+        throw std::runtime_error("HTTP provider 要求 llm.max_prompt_context_chars 必须是正数");
+    }
 }
 
 // realtime 配置在创建 WebSocket 前先完成供应商和安全边界校验，
@@ -282,6 +285,17 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
     config.llm.base_url = readOptionalString(llm, "base_url");
     config.llm.api_key_env = readOptionalString(llm, "api_key_env");
     config.llm.timeout_ms = readPositiveIntWithDefault(llm, "timeout_ms", 30000);
+    config.llm.max_prompt_context_chars = readPositiveIntWithDefault(
+        llm, "max_prompt_context_chars", config.llm.max_prompt_context_chars);
+
+    if (root.contains("report")) {
+        // report 是本地输出策略而不是外部服务配置。关闭导出时仍保留目录字段，
+        // 方便用户以后只改一个布尔开关重新启用，不需要恢复默认目录。
+        const nlohmann::json& report = requireObject(root, "report");
+        config.report.save_json = readBoolWithDefault(report, "save_json", config.report.save_json);
+        config.report.output_directory = readOptionalStringWithDefault(
+            report, "output_directory", config.report.output_directory);
+    }
 
     if (root.contains("realtime")) {
         const nlohmann::json& realtime = requireObject(root, "realtime");
@@ -345,6 +359,9 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
 
     // 所有字段装配完成后再做跨字段/provider 校验，保证校验函数看到的是完整配置。
     validateLlmConfig(config);
+    if (config.report.save_json && config.report.output_directory.empty()) {
+        throw std::runtime_error("启用报告导出时 report.output_directory 不能为空");
+    }
     validateRealtimeConfig(config);
     return config;
 }

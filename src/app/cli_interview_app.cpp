@@ -5,6 +5,8 @@
 #include "session/interview_state.h"
 
 #include <algorithm>
+#include <exception>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -69,17 +71,37 @@ void printSummary(std::size_t question_count, const session::DialogSession& inte
     }
 }
 
-// 报告先直接打印成 JSON，后续再决定是否持久化到文件或接入 UI。
+// 报告既打印为 JSON 便于学习，也可由调用方显式配置为持久化文件。
 void printReportJson(const session::DialogSession& interview_session, std::ostream& output) {
     const nlohmann::json report = session::buildInterviewReportJson(interview_session);
     output << "\n=== 面试报告 JSON ===\n";
     output << report.dump(2) << '\n';
 }
 
+// 把导出失败收口在 app 层：报告正文不会进入日志，终端只显示用户指定目录中的最终路径或错误摘要。
+bool exportReportIfConfigured(const session::DialogSession& interview_session,
+                              const std::string& output_directory, std::ostream& output) {
+    if (output_directory.empty()) {
+        return true;
+    }
+
+    try {
+        const std::filesystem::path report_path =
+            session::createInterviewReportPath(output_directory);
+        session::saveInterviewReportJson(interview_session, report_path);
+        output << "报告已保存到：" << report_path.string() << '\n';
+        return true;
+    } catch (const std::exception& error) {
+        output << "报告导出失败：" << error.what() << '\n';
+        return false;
+    }
+}
+
 } // namespace
 
 int runCliInterview(std::istream& input, std::ostream& output,
-                    session::PreparedInterview& prepared_interview) {
+                    session::PreparedInterview& prepared_interview,
+                    const std::string& report_output_directory) {
     if (!prepared_interview.isReady()) {
         output << prepared_interview.getErrorMessage() << '\n';
         return 1;
@@ -181,6 +203,10 @@ int runCliInterview(std::istream& input, std::ostream& output,
     transitionState(interview_session, session::InterviewState::kSessionEnding, output);
     printSummary(manager.getQuestionCount(), interview_session, output);
     printReportJson(interview_session, output);
+    if (!exportReportIfConfigured(interview_session, report_output_directory, output)) {
+        transitionState(interview_session, session::InterviewState::kError, output);
+        return 1;
+    }
     transitionState(interview_session, session::InterviewState::kCompleted, output);
     output << "面试完成。\n";
     return 0;

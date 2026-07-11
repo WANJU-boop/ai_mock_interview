@@ -43,9 +43,12 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<interview::services::IRealtimeClient> realtime_client =
             interview::services::createRealtimeClient(config.realtime, scripted_events);
+        const std::string report_output_directory =
+            config.report.save_json ? config.report.output_directory : "";
         if (config.realtime.provider == "mock") {
             return interview::app::runConfiguredRealtimeInterview(
-                std::cout, prepared_interview, *realtime_client, config.realtime.provider);
+                std::cout, prepared_interview, *realtime_client, config.realtime.provider, nullptr,
+                report_output_directory);
         }
 
         if (config.realtime.dialog.input_mod == "audio") {
@@ -67,7 +70,7 @@ int main(int argc, char* argv[]) {
                                                                  capture_format, playback_format);
             return interview::app::runConfiguredRealtimeInterview(
                 std::cout, prepared_interview, *realtime_client, config.realtime.provider,
-                &audio_bridge);
+                &audio_bridge, report_output_directory);
         }
 
         // text 模式继续保留最小 WSS smoke test，避免在没有麦克风的机器上误进入完整音频循环。

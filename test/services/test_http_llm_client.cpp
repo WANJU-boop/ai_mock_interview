@@ -130,6 +130,22 @@ TEST(HttpLlmClientTest, IncludesResumeContextInQuestionRequestBody) {
     EXPECT_NE(transport->last_request.body.find("C++ 日志系统"), std::string::npos);
 }
 
+// 验证超长简历在进入 LLM 前会被限制。这个边界防止 PDF 全文意外放大请求成本和敏感信息暴露面。
+TEST(HttpLlmClientTest, TruncatesResumeContextToConfiguredLimit) {
+    ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"questions":["Resume based question"]})"};
+    interview::common::LlmConfig config = makeHttpConfig();
+    config.max_prompt_context_chars = 5;
+    interview::services::HttpLlmClient client(config, transport);
+
+    client.generateQuestions({"Demo Candidate", "C++ Intern", 1, "ABCDE-SECRET-SUFFIX"});
+
+    EXPECT_NE(transport->last_request.body.find("ABCDE"), std::string::npos);
+    EXPECT_EQ(transport->last_request.body.find("SECRET-SUFFIX"), std::string::npos);
+    EXPECT_NE(transport->last_request.body.find("已按长度限制截断"), std::string::npos);
+}
+
 // 验证 base_url 带尾斜杠时仍只会追加一次 /chat/completions，避免真实请求地址重复拼接。
 TEST(HttpLlmClientTest, AppendsChatCompletionsToBaseUrlWithTrailingSlash) {
     ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
@@ -254,6 +270,26 @@ TEST(HttpLlmClientTest, ThrowsWhenQuestionArrayContainsEmptyString) {
     EXPECT_THROW(client.generateQuestions({"Demo Candidate", "C++ Intern", 2}), std::runtime_error);
 }
 
+// 验证只有空白的题目也会被拒绝，避免模型用不可见字符绕过“非空题目”的结构化契约。
+TEST(HttpLlmClientTest, ThrowsWhenQuestionArrayContainsWhitespaceOnlyString) {
+    ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"questions":["   "]})"};
+    interview::services::HttpLlmClient client(makeHttpConfig(), transport);
+
+    EXPECT_THROW(client.generateQuestions({"Demo Candidate", "C++ Intern", 1}), std::runtime_error);
+}
+
+// 验证模型返回的题目数量必须与面试计划一致，防止 UI 进度、问题下标和最终报告出现错位。
+TEST(HttpLlmClientTest, ThrowsWhenQuestionCountDoesNotMatchRequest) {
+    ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"questions":["Question A"]})"};
+    interview::services::HttpLlmClient client(makeHttpConfig(), transport);
+
+    EXPECT_THROW(client.generateQuestions({"Demo Candidate", "C++ Intern", 2}), std::runtime_error);
+}
+
 // 验证评分越界时会明确拒绝，避免上层 UI 或追问逻辑拿到非法分数。
 TEST(HttpLlmClientTest, ThrowsWhenScoreResponseHasOutOfRangeScore) {
     ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
@@ -271,6 +307,16 @@ TEST(HttpLlmClientTest, ThrowsWhenScoreResponseMissesFeedback) {
     const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
     transport->next_response = {200, R"({"score":81})"};
 
+    interview::services::HttpLlmClient client(makeHttpConfig(), transport);
+
+    EXPECT_THROW(client.scoreAnswer({"Explain RAII.", "Sample answer."}), std::runtime_error);
+}
+
+// 验证只有空白的评分反馈会被拒绝；报告不能保存一个看似成功却没有可读建议的结果。
+TEST(HttpLlmClientTest, ThrowsWhenScoreFeedbackIsWhitespaceOnly) {
+    ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"score":81,"feedback":" \t "})"};
     interview::services::HttpLlmClient client(makeHttpConfig(), transport);
 
     EXPECT_THROW(client.scoreAnswer({"Explain RAII.", "Sample answer."}), std::runtime_error);

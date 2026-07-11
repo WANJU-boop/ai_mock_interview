@@ -108,6 +108,9 @@ TEST(ConfigTest, LoadsValidConfig) {
     EXPECT_TRUE(config.llm.base_url.empty());
     EXPECT_TRUE(config.llm.api_key_env.empty());
     EXPECT_EQ(config.llm.timeout_ms, 30000);
+    EXPECT_EQ(config.llm.max_prompt_context_chars, 8000);
+    EXPECT_TRUE(config.report.save_json);
+    EXPECT_EQ(config.report.output_directory, "reports");
     EXPECT_EQ(config.realtime.provider, "mock");
     EXPECT_EQ(config.realtime.dialog.input_mod, "text");
     EXPECT_EQ(config.realtime.connection.timeout_ms, 30000);
@@ -154,7 +157,12 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
                 "model": "gpt-4o-mini",
                 "base_url": "https://api.openai.com/v1",
                 "api_key_env": "OPENAI_API_KEY",
-                "timeout_ms": 45000
+                "timeout_ms": 45000,
+                "max_prompt_context_chars": 12000
+            },
+            "report": {
+                "save_json": false,
+                "output_directory": "custom_reports"
             }
         })");
 
@@ -165,6 +173,31 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
     EXPECT_EQ(config.llm.base_url, "https://api.openai.com/v1");
     EXPECT_EQ(config.llm.api_key_env, "OPENAI_API_KEY");
     EXPECT_EQ(config.llm.timeout_ms, 45000);
+    EXPECT_EQ(config.llm.max_prompt_context_chars, 12000);
+    EXPECT_FALSE(config.report.save_json);
+    EXPECT_EQ(config.report.output_directory, "custom_reports");
+}
+
+// 验证 LLM prompt 上下文长度必须为正数，避免超长简历保护逻辑退化成 0 或负数的歧义行为。
+TEST(ConfigTest, ThrowsWhenLlmPromptContextLimitIsNotPositive) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_prompt_context_limit_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "http",
+                "model": "gpt-4o-mini",
+                "base_url": "https://api.openai.com/v1",
+                "api_key_env": "OPENAI_API_KEY",
+                "max_prompt_context_chars": 0
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
 // 验证 realtime mock 配置可以显式写入，后续 demo 入口能通过统一配置选择离线事件脚本。
