@@ -48,6 +48,7 @@ target_link_libraries(common_lib
 # service 模块转成库
 # =========================
 add_library(services_lib
+    src/services/audio/mock/fake_audio_device.cpp
     src/services/llm/http/beast_http_transport.cpp
     src/services/llm/http/http_llm_client.cpp
     src/services/llm/llm_client_factory.cpp

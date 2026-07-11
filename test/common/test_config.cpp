@@ -112,6 +112,9 @@ TEST(ConfigTest, LoadsValidConfig) {
     EXPECT_EQ(config.realtime.dialog.input_mod, "text");
     EXPECT_EQ(config.realtime.connection.timeout_ms, 30000);
     EXPECT_EQ(config.realtime.tts.sample_rate_hz, 24000);
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 16000);
+    EXPECT_EQ(config.realtime.audio.capture_channels, 1);
+    EXPECT_EQ(config.realtime.audio.frames_per_buffer, 320);
 }
 
 // 验证可选简历路径可以从配置进入 InterviewConfig，后续启动阶段再决定是否解析。
@@ -223,6 +226,11 @@ TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
                     "audio_format": "pcm_s16le",
                     "sample_rate_hz": 16000,
                     "channels": 2
+                },
+                "audio": {
+                    "capture_sample_rate_hz": 48000,
+                    "capture_channels": 2,
+                    "frames_per_buffer": 960
                 }
             }
         })");
@@ -239,6 +247,34 @@ TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
     EXPECT_EQ(config.realtime.tts.speaker, "demo-speaker");
     EXPECT_EQ(config.realtime.tts.sample_rate_hz, 16000);
     EXPECT_EQ(config.realtime.tts.channels, 2);
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 48000);
+    EXPECT_EQ(config.realtime.audio.capture_channels, 2);
+    EXPECT_EQ(config.realtime.audio.frames_per_buffer, 960);
+}
+
+// 验证本地采集格式必须为正数。虽然本阶段尚未打开真实音频模式，错误配置也应在启动时被拒绝。
+TEST(ConfigTest, ThrowsWhenRealtimeAudioFramesPerBufferIsNotPositive) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_audio_buffer_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "mock",
+                "audio": {
+                    "frames_per_buffer": 0
+                }
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
 // 验证真实 realtime provider 必须使用 WSS，避免把鉴权信息放到明文 WebSocket 里。

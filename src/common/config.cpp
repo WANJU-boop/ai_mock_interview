@@ -324,6 +324,18 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
             config.realtime.tts.channels =
                 readPositiveIntWithDefault(tts, "channels", config.realtime.tts.channels);
         }
+
+        if (realtime.contains("audio")) {
+            // audio 只保存设备无关的 PCM 约定。PortAudio 流会在运行时由 adapter 创建，
+            // 因而这里不能也不需要探测麦克风权限或具体硬件。
+            const nlohmann::json& audio = requireObject(realtime, "audio");
+            config.realtime.audio.capture_sample_rate_hz = readPositiveIntWithDefault(
+                audio, "capture_sample_rate_hz", config.realtime.audio.capture_sample_rate_hz);
+            config.realtime.audio.capture_channels = readPositiveIntWithDefault(
+                audio, "capture_channels", config.realtime.audio.capture_channels);
+            config.realtime.audio.frames_per_buffer = readPositiveIntWithDefault(
+                audio, "frames_per_buffer", config.realtime.audio.frames_per_buffer);
+        }
     }
 
     // 所有字段装配完成后再做跨字段/provider 校验，保证校验函数看到的是完整配置。

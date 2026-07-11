@@ -7,6 +7,7 @@ add_executable(Project_test
     common/test_config.cpp
     common/test_logger.cpp
     common/test_realtime_protocol.cpp
+    services/test_audio_device.cpp
     services/test_http_llm_client.cpp
     services/test_llm_client.cpp
     services/test_llm_client_factory.cpp

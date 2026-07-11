@@ -65,6 +65,17 @@ struct RealtimeTtsConfig {
     int channels = 1;
 };
 
+// 本地麦克风采集配置。它与服务端 TTS 输出分开：前者决定录音帧如何产生，
+// 后者决定收到的语音如何播放，二者的采样率不要求相同。
+struct RealtimeAudioConfig {
+    // ASR 输入使用单声道 PCM；16 kHz 是当前 realtime 音频会话的默认采集格式。
+    int capture_sample_rate_hz = 16000;
+    // 声道数参与 frame 对齐校验；后续设备适配器不得把双声道数据伪装成单声道发送。
+    int capture_channels = 1;
+    // 每次从设备读取的帧数。它只控制延迟与调用频率，不属于服务端协议字段。
+    int frames_per_buffer = 320;
+};
+
 // Realtime provider 配置只聚合可持久化的用户设置，不持有 WebSocket、密钥值或运行时 ID。
 struct RealtimeConfig {
     // mock 是默认 provider，保证普通构建和单元测试不需要网络、麦克风或服务端账号。
@@ -73,6 +84,8 @@ struct RealtimeConfig {
     RealtimeConnectionConfig connection;
     RealtimeDialogConfig dialog;
     RealtimeTtsConfig tts;
+    // audio 仅描述本地录音格式；设备对象、PortAudio 流和缓存队列均是运行时资源。
+    RealtimeAudioConfig audio;
 };
 
 // 应用级配置把三个模块的配置聚合起来，入口层加载一次后再分别注入对应模块。

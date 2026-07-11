@@ -33,6 +33,11 @@
       "audio_format": "pcm_s16le",
       "sample_rate_hz": 24000,
       "channels": 1
+    },
+    "audio": {
+      "capture_sample_rate_hz": 16000,
+      "capture_channels": 1,
+      "frames_per_buffer": 320
     }
   }
 }
