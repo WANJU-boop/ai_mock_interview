@@ -15,6 +15,8 @@ class PortAudioAudioDevice final : public IAudioDevice {
     PortAudioAudioDevice();
     ~PortAudioAudioDevice() override;
 
+
+    //表示这个类不能被复制
     PortAudioAudioDevice(const PortAudioAudioDevice&) = delete;
     PortAudioAudioDevice& operator=(const PortAudioAudioDevice&) = delete;
 

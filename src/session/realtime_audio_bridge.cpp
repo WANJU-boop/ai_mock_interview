@@ -8,12 +8,17 @@ namespace interview {
 namespace session {
 
 namespace {
-
+//这个函数检查 payload 是不是合法的 PCM 音频数据。
 bool isValidPcmPayload(const std::vector<std::uint8_t>& bytes) {
     // s16le 每个样本必须恰好两个字节；空 payload 表示这条事件没有携带 TTS 音频而非播放失败。
     return !bytes.empty() && bytes.size() % 2 == 0;
 }
 
+
+//把网络返回的原始字节，按照小段模式解码变成你的音频设备能播放的 AudioPcmChunk
+// 第一个字节放低位
+// 第二个字节左移 8 位，放高位
+// 然后用 | 合起来
 services::AudioPcmChunk decodeLittleEndianPcm(const std::vector<std::uint8_t>& bytes) {
     services::AudioPcmChunk chunk;
     chunk.samples.reserve(bytes.size() / 2);
@@ -27,13 +32,17 @@ services::AudioPcmChunk decodeLittleEndianPcm(const std::vector<std::uint8_t>& b
 
 } // namespace
 
-RealtimeAudioBridge::RealtimeAudioBridge(services::IAudioDevice& audio_device,
-                                         services::IRealtimeClient& realtime_client,
-                                         services::AudioPcmFormat capture_format,
-                                         services::AudioPcmFormat playback_format)
+
+
+RealtimeAudioBridge::RealtimeAudioBridge(services::IAudioDevice& audio_device, //音频设备，比如你前面那个 PortAudioAudioDevice。
+                                         services::IRealtimeClient& realtime_client, //实时客户端，比如 WebSocket client，用来和大模型通信。
+                                         services::AudioPcmFormat capture_format,  //录音格式。
+                                         services::AudioPcmFormat playback_format)  //播放格式。
     : audio_device_(audio_device), realtime_client_(realtime_client),
       capture_format_(capture_format), playback_format_(playback_format) {}
 
+
+//启动整个音频桥。
 bool RealtimeAudioBridge::start() {
     if (started_) {
         return false;
@@ -51,12 +60,16 @@ bool RealtimeAudioBridge::start() {
     return true;
 }
 
+
+//把麦克风录到的音频，一块一块发送给 realtime_client_
 bool RealtimeAudioBridge::pumpCapturedAudio() {
     if (!started_) {
         return false;
     }
 
-    for (;;) {
+//等价于：while (true) {
+    for (;;) {  
+        ////会从音频设备读取一块录音数据。
         const std::optional<services::AudioPcmChunk> chunk = audio_device_.tryReadCapturedChunk();
         if (!chunk.has_value()) {
             return true;
@@ -68,6 +81,8 @@ bool RealtimeAudioBridge::pumpCapturedAudio() {
     }
 }
 
+// 处理 realtime_client_ 收到的事件
+// 如果事件里有 TTS 音频 payload，就播放出来
 bool RealtimeAudioBridge::consumeRealtimeEvent(const common::RealtimeEvent& event) {
     if (!started_ || event.type != common::RealtimeEventType::kInterviewerText ||
         event.payload.empty()) {
