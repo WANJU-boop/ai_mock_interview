@@ -30,11 +30,11 @@ class IAudioDevice {
     virtual ~IAudioDevice() = default;
 
     // 建立输入流。格式非法、设备不可用或设备已经停止时返回 false；不抛出第三方库对象。
-    // 打开麦克风流 
+    // 打开麦克风流
     virtual bool startCapture(const AudioPcmFormat& format) = 0;
 
     // 建立输出流。输入输出可使用不同格式，调用方必须分别传入 ASR 与 TTS 的实际约定。
-    // 打开扬声器流 
+    // 打开扬声器流
     virtual bool startPlayback(const AudioPcmFormat& format) = 0;
 
     // 取一块已经采集完成的 PCM。没有可读数据时返回 std::nullopt，不把“暂时没有声音”当错误。
@@ -44,6 +44,10 @@ class IAudioDevice {
     // 把完整 PCM 块交给播放端。设备未启动、块为空或通道未对齐时返回 false。
     // 把PCM块 给播放端 播放
     virtual bool playPcmChunk(const AudioPcmChunk& chunk) = 0;
+
+    // 判断播放队列中是否仍有尚未被扬声器消费的样本。TTS 服务端结束只代表“不再发新包”，
+    // 本地仍可能有尾音；必须等队列排空后再恢复真实麦克风，避免把扬声器回声送进 ASR。
+    virtual bool hasPendingPlayback() const = 0;
 
     // 停止输入和输出资源。此函数必须幂等，保证连接失败、用户取消和析构收口可以共用同一入口。
     virtual void stop() = 0;

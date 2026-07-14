@@ -11,7 +11,7 @@ namespace services {
 namespace {
 
 std::string requireEnvValue(const std::string& env_name) {
-    // 配置文件只保存环境变量名；真实密钥只在运行时进入内存，不能写入 JSON 或日志。
+    // 这是直写值缺失时的兼容回退；取到的密钥不输出到日志。
     const char* value = std::getenv(env_name.c_str());
     if (value == nullptr || std::string(value).empty()) {
         throw std::runtime_error("请先设置环境变量：" + env_name);
@@ -38,8 +38,12 @@ VolcRealtimeRuntimeConfig resolveVolcRealtimeRuntimeConfig(const common::Realtim
     // 手动 demo 与主流程 factory 不会再各自维护一份密钥读取和默认值。
     VolcRealtimeRuntimeConfig runtime;
     runtime.endpoint = config.connection.endpoint;
-    runtime.app_id = requireEnvValue(config.connection.app_id_env);
-    runtime.access_key = requireEnvValue(config.connection.access_key_env);
+    runtime.app_id = config.connection.app_id.empty()
+                         ? requireEnvValue(config.connection.app_id_env)
+                         : config.connection.app_id;
+    runtime.access_key = config.connection.access_key.empty()
+                             ? requireEnvValue(config.connection.access_key_env)
+                             : config.connection.access_key;
     runtime.resource_id = config.connection.resource_id;
     runtime.app_key = config.connection.app_key;
     runtime.connect_id = makeRuntimeId("connect");

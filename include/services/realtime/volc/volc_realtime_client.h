@@ -37,6 +37,8 @@ class VolcRealtimeClient final {
     void sendAudioPcm(const std::vector<std::uint8_t>& pcm_s16le);
     // 从 transport 读取并解码一个火山 frame；错误 frame 会转成异常。
     VolcRealtimeFrame receiveFrame();
+    // 非阻塞查询是否已有服务端 frame 可读，供音频循环在收包间隙继续发送 PCM。
+    bool hasPendingFrame() const;
     // 持续读取直到看到指定事件，返回中间所有 frame，便于调用方检查完整服务端响应。
     std::vector<VolcRealtimeFrame> receiveUntilEvent(VolcRealtimeEventId event_id);
     // 文本问答的便利函数：持续读取直到 ChatEnded，表示本轮对话回答结束。
@@ -58,8 +60,6 @@ class VolcRealtimeClient final {
     VolcRealtimeRuntimeConfig config_;
     // transport 用 shared_ptr 注入，测试和手动 demo 都可以共享同一个 fake/真实实例观察状态。
     std::shared_ptr<IVolcRealtimeTransport> transport_;
-    // 音频 sequence 从正数开始递增；它是当前 client 单线程发送路径的私有状态。
-    std::int32_t next_audio_sequence_ = 1;
 };
 
 } // namespace services

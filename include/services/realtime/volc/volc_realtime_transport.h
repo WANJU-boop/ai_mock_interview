@@ -37,6 +37,9 @@ class IVolcRealtimeTransport {
     virtual void sendBinary(const std::vector<std::uint8_t>& bytes) = 0;
     // 阻塞读取一个完整 WebSocket binary message，再交给协议层解码。
     virtual std::vector<std::uint8_t> receiveBinary() = 0;
+    // 非阻塞判断底层是否已有网络数据。实时 worker 先用它轮询，才能在等待服务端事件时
+    // 继续按 20ms 节奏发送麦克风 PCM，而不会卡死在同步 read()。
+    virtual bool hasPendingMessage() const = 0;
     // 关闭底层连接。调用方可以多次清理，真实实现应尽量做到幂等。
     virtual void close() = 0;
 };

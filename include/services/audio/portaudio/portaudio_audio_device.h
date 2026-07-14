@@ -15,8 +15,7 @@ class PortAudioAudioDevice final : public IAudioDevice {
     PortAudioAudioDevice();
     ~PortAudioAudioDevice() override;
 
-
-    //表示这个类不能被复制
+    // 表示这个类不能被复制
     PortAudioAudioDevice(const PortAudioAudioDevice&) = delete;
     PortAudioAudioDevice& operator=(const PortAudioAudioDevice&) = delete;
 
@@ -24,6 +23,7 @@ class PortAudioAudioDevice final : public IAudioDevice {
     bool startPlayback(const AudioPcmFormat& format) override;
     std::optional<AudioPcmChunk> tryReadCapturedChunk() override;
     bool playPcmChunk(const AudioPcmChunk& chunk) override;
+    bool hasPendingPlayback() const override;
     void stop() override;
 
   private:

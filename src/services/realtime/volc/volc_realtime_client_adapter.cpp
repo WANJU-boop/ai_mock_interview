@@ -1,5 +1,7 @@
 #include "services/realtime/volc/volc_realtime_client_adapter.h"
 
+#include "common/logger.h"
+
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -140,6 +142,10 @@ mapVolcRealtimeFrameToRealtimeEvent(const VolcRealtimeFrame& frame) {
         case VolcRealtimeEventId::kSessionFinished:
             // 任一关闭事件都代表业务事件流应该收口。
             return makeEvent(common::RealtimeEventType::kClosed);
+        case VolcRealtimeEventId::kTtsSentenceStart:
+            return makeEvent(common::RealtimeEventType::kTtsStarted);
+        case VolcRealtimeEventId::kTtsEnded:
+            return makeEvent(common::RealtimeEventType::kTtsEnded);
         case VolcRealtimeEventId::kAsrResponse:
             return mapAsrResponse(frame);
         case VolcRealtimeEventId::kChatResponse:
@@ -179,15 +185,21 @@ bool VolcRealtimeClientAdapter::connect() {
         client_.receiveUntilEvent(VolcRealtimeEventId::kSessionStarted);
         connected_ = true;
         closed_ = false;
+        last_error_message_.clear();
         // DialogOrchestrator 只认识项目内部事件，所以这里补一个 kConnected 放到待消费队列。
         pending_events_.push_back(makeEvent(common::RealtimeEventType::kConnected));
         return true;
-    } catch (const std::exception&) {
+    } catch (const std::exception& error) {
         // IRealtimeClient::connect 返回 bool，不向 session 层暴露火山/Beast 异常类型。
+        last_error_message_ = error.what();
         connected_ = false;
         closed_ = true;
         return false;
     }
+}
+
+std::string VolcRealtimeClientAdapter::getLastErrorMessage() const {
+    return last_error_message_;
 }
 
 bool VolcRealtimeClientAdapter::hasNextEvent() const {
@@ -197,17 +209,14 @@ bool VolcRealtimeClientAdapter::hasNextEvent() const {
 }
 
 common::RealtimeEvent VolcRealtimeClientAdapter::receiveNextEvent() {
-    if (!pending_events_.empty()) {
-        // 优先返回 adapter 自己生成的事件，例如 connect 成功后的 kConnected。
-        common::RealtimeEvent event = pending_events_.front();
-        pending_events_.pop_front();
-        return event;
+    if (const std::optional<common::RealtimeEvent> pending_event = popPendingEvent();
+        pending_event.has_value()) {
+        return *pending_event;
     }
 
     for (;;) {
         // 真实服务端可能返回 adapter 不关心的 ack。循环读取直到映射出项目内部事件。
-        std::optional<common::RealtimeEvent> event =
-            mapVolcRealtimeFrameToRealtimeEvent(client_.receiveFrame());
+        std::optional<common::RealtimeEvent> event = convertFrame(client_.receiveFrame());
         if (!event.has_value()) {
             continue;
         }
@@ -221,10 +230,101 @@ common::RealtimeEvent VolcRealtimeClientAdapter::receiveNextEvent() {
     }
 }
 
+std::optional<common::RealtimeEvent> VolcRealtimeClientAdapter::tryReceiveNextEvent() {
+    if (const std::optional<common::RealtimeEvent> pending_event = popPendingEvent();
+        pending_event.has_value()) {
+        return pending_event;
+    }
+
+    // 一次轮询可能连续遇到多个 ack，因此只要 socket 仍有数据就继续解码；一旦没有数据立即
+    // 返回，让 orchestrator 回去发送下一批 20ms PCM。
+    while (client_.hasPendingFrame()) {
+        std::optional<common::RealtimeEvent> event = convertFrame(client_.receiveFrame());
+        if (!event.has_value()) {
+            continue;
+        }
+
+        if (event->type == common::RealtimeEventType::kClosed ||
+            event->type == common::RealtimeEventType::kError) {
+            closed_ = true;
+        }
+        return event;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<common::RealtimeEvent>
+VolcRealtimeClientAdapter::convertFrame(const VolcRealtimeFrame& frame) {
+    if (frame.event_id == VolcRealtimeEventId::kAsrEnded) {
+        if (!pending_final_transcript_.has_value()) {
+            return makeErrorEvent("火山 ASREnded 到达前没有最终识别文本。");
+        }
+
+        common::RealtimeEvent final_transcript = *pending_final_transcript_;
+        pending_final_transcript_.reset();
+        return final_transcript;
+    }
+
+    if (frame.event_id == VolcRealtimeEventId::kTtsSentenceStart) {
+        try {
+            // TTSSentenceStart 的 tts_type 是区分“客户下发文本”和“火山自带闲聊”的权威字段。
+            // 只让 chat_tts_text 进入播放队列，保证面试提问唯一受 DialogOrchestrator 控制。
+            const nlohmann::json payload = parsePayloadJson(frame);
+            const std::string tts_type = stringFieldOrEmpty(payload, "tts_type");
+            forward_current_tts_audio_ = tts_type == "chat_tts_text" || expecting_say_hello_tts_;
+            LOG_INFO("火山 TTS 分类：是否播放客户文本音频={}", forward_current_tts_audio_);
+            if (!forward_current_tts_audio_) {
+                return std::nullopt;
+            }
+        } catch (const std::exception& error) {
+            return makeErrorEvent(error.what());
+        }
+    }
+
+    if (frame.event_id == VolcRealtimeEventId::kTtsResponse && !forward_current_tts_audio_) {
+        return std::nullopt;
+    }
+
+    if (frame.event_id == VolcRealtimeEventId::kTtsEnded) {
+        if (!forward_current_tts_audio_) {
+            return std::nullopt;
+        }
+        forward_current_tts_audio_ = false;
+        expecting_say_hello_tts_ = false;
+    }
+
+    std::optional<common::RealtimeEvent> event = mapVolcRealtimeFrameToRealtimeEvent(frame);
+    if (event.has_value() && event->type == common::RealtimeEventType::kTranscriptFinal) {
+        // 官方要求 ChatTTSText 必须等 ASREnded 后发送，因此 final 文本先缓存，不立即推进状态机。
+        pending_final_transcript_ = *event;
+        return std::nullopt;
+    }
+
+    return event;
+}
+
+std::optional<common::RealtimeEvent> VolcRealtimeClientAdapter::popPendingEvent() {
+    if (pending_events_.empty()) {
+        return std::nullopt;
+    }
+
+    common::RealtimeEvent event = pending_events_.front();
+    pending_events_.pop_front();
+    return event;
+}
+
 bool VolcRealtimeClientAdapter::sendInterviewerText(const std::string& text) {
     try {
-        // 项目内部接口叫“发送面试官文本”，火山实现需要转成 ChatTTSText。
-        // 这里隐藏供应商事件名，让 session 层不依赖火山协议。
+        // 火山要求 ChatTTSText 必须在 ASREnded 之后。开场还没有用户 query，
+        // 因此第一段“欢迎语 + 第一题”用 SayHello，后续追问和新题再用 ChatTTSText。
+        if (should_send_say_hello_) {
+            client_.sendSayHello(text);
+            should_send_say_hello_ = false;
+            expecting_say_hello_tts_ = true;
+            return true;
+        }
+
         client_.sendChatTtsText(text);
         return true;
     } catch (const std::exception&) {

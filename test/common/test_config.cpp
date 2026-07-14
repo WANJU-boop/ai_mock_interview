@@ -178,6 +178,42 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
     EXPECT_EQ(config.report.output_directory, "custom_reports");
 }
 
+// 验证被 Git 忽略的本地配置可直接提供鉴权值，用户无需再设置 shell 环境变量。
+// fixture 只使用假值，防止真实密钥进入仓库或测试输出。
+TEST(ConfigTest, LoadsDirectLocalCredentialFields) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "direct_credentials_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 1
+            },
+            "llm": {
+                "provider": "http",
+                "model": "test-model",
+                "base_url": "https://example.com/v1",
+                "api_key": "fake-llm-key"
+            },
+            "realtime": {
+                "provider": "volc",
+                "connection": {
+                    "app_id": "fake-app-id",
+                    "access_key": "fake-access-key"
+                },
+                "dialog": {
+                    "input_mod": "keep_alive"
+                }
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.llm.api_key, "fake-llm-key");
+    EXPECT_EQ(config.realtime.connection.app_id, "fake-app-id");
+    EXPECT_EQ(config.realtime.connection.access_key, "fake-access-key");
+}
+
 // 验证 LLM prompt 上下文长度必须为正数，避免超长简历保护逻辑退化成 0 或负数的歧义行为。
 TEST(ConfigTest, ThrowsWhenLlmPromptContextLimitIsNotPositive) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
@@ -335,7 +371,7 @@ TEST(ConfigTest, ThrowsWhenVolcRealtimeEndpointIsNotSecure) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
-// 验证 audio 模式在 PortAudio/PCM 边界完成后可以加载，入口层才能据此选择真实音频主链路。
+// 验证 keep_alive 模式可以加载，入口层才能据此选择真实音频主链路。
 TEST(ConfigTest, LoadsVolcRealtimeAudioMode) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "invalid_volc_audio_mode_test.json",
@@ -352,18 +388,18 @@ TEST(ConfigTest, LoadsVolcRealtimeAudioMode) {
             "realtime": {
                 "provider": "volc",
                 "dialog": {
-                    "input_mod": "audio"
+                    "input_mod": "keep_alive"
                 }
             }
         })");
 
     const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
 
-    EXPECT_EQ(config.realtime.dialog.input_mod, "audio");
+    EXPECT_EQ(config.realtime.dialog.input_mod, "keep_alive");
     EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 16000);
 }
 
-// 验证 audio 模式不接受未知 TTS 格式。当前播放器只实现 pcm_s16le，静默接收其它格式会播出错误音频。
+// 验证 keep_alive 模式不接受未知 TTS 格式。当前播放器只实现 pcm_s16le。
 TEST(ConfigTest, ThrowsWhenAudioModeUsesUnsupportedTtsFormat) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "invalid_audio_tts_format_config_test.json",
@@ -380,7 +416,7 @@ TEST(ConfigTest, ThrowsWhenAudioModeUsesUnsupportedTtsFormat) {
             "realtime": {
                 "provider": "volc",
                 "dialog": {
-                    "input_mod": "audio"
+                    "input_mod": "keep_alive"
                 },
                 "tts": {
                     "audio_format": "mp3"

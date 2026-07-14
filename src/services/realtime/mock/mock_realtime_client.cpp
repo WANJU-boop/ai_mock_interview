@@ -28,6 +28,10 @@ bool MockRealtimeClient::hasNextEvent() const {
     return connected_ && !closed_ && next_event_index_ < scripted_events_.size();
 }
 
+std::string MockRealtimeClient::getLastErrorMessage() const {
+    return "";
+}
+
 common::RealtimeEvent MockRealtimeClient::receiveNextEvent() {
     if (!hasNextEvent()) {
         throw std::out_of_range("没有可读取的 realtime mock 事件。");
@@ -43,6 +47,14 @@ common::RealtimeEvent MockRealtimeClient::receiveNextEvent() {
     }
 
     return event;
+}
+
+std::optional<common::RealtimeEvent> MockRealtimeClient::tryReceiveNextEvent() {
+    if (!hasNextEvent()) {
+        return std::nullopt;
+    }
+
+    return receiveNextEvent();
 }
 
 bool MockRealtimeClient::sendInterviewerText(const std::string& text) {

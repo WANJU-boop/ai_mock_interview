@@ -20,8 +20,12 @@ class MockRealtimeClient final : public IRealtimeClient {
     bool connect() override;
     // 只有已连接、未关闭且脚本仍有剩余事件时才允许继续消费。
     bool hasNextEvent() const override;
+    // mock 连接不产生供应商错误，因此返回空字符串。
+    std::string getLastErrorMessage() const override;
     // 按顺序返回下一条脚本事件；空读会抛出 std::out_of_range，避免测试静默越界。
     common::RealtimeEvent receiveNextEvent() override;
+    // mock 的事件都已在内存中；有剩余脚本时立即返回，否则返回空值。
+    std::optional<common::RealtimeEvent> tryReceiveNextEvent() override;
     // 记录面试官文本供断言；未连接或已关闭时返回 false。
     bool sendInterviewerText(const std::string& text) override;
     // 记录候选人 PCM 块，让音频桥测试可以确认采集数据已进入 realtime 边界。

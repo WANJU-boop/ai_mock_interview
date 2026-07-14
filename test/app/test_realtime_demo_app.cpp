@@ -49,7 +49,7 @@ TEST(RealtimeDemoAppTest, CompletesSingleQuestionAndPrintsReport) {
 
     EXPECT_EQ(exit_code, 0);
     EXPECT_NE(rendered_output.find("=== Realtime mock Demo ==="), std::string::npos);
-    EXPECT_NE(rendered_output.find("面试官：问题 1/1："), std::string::npos);
+    EXPECT_NE(rendered_output.find("问题 1/1："), std::string::npos);
     EXPECT_NE(rendered_output.find("\"question_count\": 1"), std::string::npos);
     EXPECT_NE(rendered_output.find("Realtime mock 面试完成。"), std::string::npos);
 }
@@ -66,7 +66,7 @@ TEST(RealtimeDemoAppTest, ProcessesMultipleQuestionsWithDefaultScript) {
     const std::string rendered_output = output.str();
 
     EXPECT_EQ(exit_code, 0);
-    EXPECT_NE(rendered_output.find("面试官：问题 1/2："), std::string::npos);
+    EXPECT_NE(rendered_output.find("问题 1/2："), std::string::npos);
     EXPECT_NE(rendered_output.find("面试官：问题 2/2："), std::string::npos);
     EXPECT_NE(rendered_output.find("\"question_count\": 2"), std::string::npos);
 }

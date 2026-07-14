@@ -38,6 +38,11 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
         return frame;
     }
 
+    bool hasPendingMessage() const override {
+        // fake 队列非空就等价于底层 socket 已有可读 WebSocket message。
+        return !incoming_frames.empty();
+    }
+
     void close() override {
         closed = true;
     }
@@ -163,13 +168,13 @@ TEST(VolcRealtimeClientTest, SendsStartConnectionAndSessionEvents) {
     EXPECT_NE(payload.find(R"("strict_audit":true)"), std::string::npos);
 }
 
-// 验证 audio 模式把 PCM 作为 raw sequence frame 发送。协议层不在 payload 前插 JSON，
-// 否则服务端 ASR 无法按采样值解析候选人声音。
+// 验证 keep_alive 模式把 PCM 作为携带 TaskRequest 事件的 raw frame 发送。
+// 火山新协议不使用 sequence；如果漏了 event/session，服务端不会把它当成 ASR 音频。
 TEST(VolcRealtimeClientTest, SendsAudioPcmAsRawSequenceFrame) {
     const std::shared_ptr<FakeVolcRealtimeTransport> transport =
         std::make_shared<FakeVolcRealtimeTransport>();
     interview::services::VolcRealtimeRuntimeConfig config = makeConfig();
-    config.input_mod = "audio";
+    config.input_mod = "keep_alive";
     interview::services::VolcRealtimeClient client(config, transport);
 
     client.connect();
@@ -179,10 +184,11 @@ TEST(VolcRealtimeClientTest, SendsAudioPcmAsRawSequenceFrame) {
     const interview::services::VolcRealtimeFrame frame =
         interview::services::decodeVolcRealtimeFrame(transport->sent_frames.front());
     EXPECT_EQ(frame.message_type, interview::services::VolcRealtimeMessageType::kAudioOnlyRequest);
-    EXPECT_EQ(frame.flag, interview::services::VolcRealtimeMessageFlag::kPositiveSequence);
+    EXPECT_EQ(frame.flag, interview::services::VolcRealtimeMessageFlag::kEvent);
     EXPECT_EQ(frame.serialization, interview::services::VolcRealtimeSerialization::kRaw);
-    ASSERT_TRUE(frame.sequence.has_value());
-    EXPECT_EQ(*frame.sequence, 1);
+    EXPECT_EQ(frame.event_id, interview::services::VolcRealtimeEventId::kTaskRequest);
+    EXPECT_EQ(frame.session_id, "session-001");
+    EXPECT_FALSE(frame.sequence.has_value());
     EXPECT_EQ(frame.payload, (std::vector<std::uint8_t>{0x01, 0x00, 0xFE, 0xFF}));
 }
 

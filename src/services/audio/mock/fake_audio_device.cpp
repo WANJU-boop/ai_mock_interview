@@ -70,6 +70,11 @@ bool FakeAudioDevice::playPcmChunk(const AudioPcmChunk& chunk) {
     return true;
 }
 
+bool FakeAudioDevice::hasPendingPlayback() const {
+    // fake 的 playPcmChunk 代表同步消费并保存观察值，没有真实硬件播放队列。
+    return playback_pending_for_testing_;
+}
+
 void FakeAudioDevice::stop() {
     // 清理只改变生命周期标记，不清除 played_chunks_，让测试在收口后仍能验证已播放数据。
     stopped_ = true;
@@ -91,6 +96,10 @@ bool FakeAudioDevice::isPlaybackStarted() const {
 
 bool FakeAudioDevice::isStopped() const {
     return stopped_;
+}
+
+void FakeAudioDevice::setPlaybackPendingForTesting(bool pending) {
+    playback_pending_for_testing_ = pending;
 }
 
 } // namespace services

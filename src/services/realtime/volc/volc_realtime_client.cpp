@@ -1,5 +1,7 @@
 #include "services/realtime/volc/volc_realtime_client.h"
 
+#include "common/logger.h"
+
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <utility>
@@ -121,22 +123,24 @@ void VolcRealtimeClient::sendTextQuery(const std::string& content) {
 }
 
 void VolcRealtimeClient::sendAudioPcm(const std::vector<std::uint8_t>& pcm_s16le) {
-    if (config_.input_mod != "audio") {
-        throw std::runtime_error("只有 audio 模式可以发送候选人 PCM。");
+    if (config_.input_mod != "keep_alive" && config_.input_mod != "push_to_talk" &&
+        config_.input_mod != "audio_file") {
+        throw std::runtime_error("当前 realtime input_mod 不能发送候选人 PCM。");
     }
     if (pcm_s16le.empty() || pcm_s16le.size() % 2 != 0) {
         // s16le 每个采样恰好两个字节。奇数字节说明上游 PCM 块已经损坏，不能交给服务端猜测。
         throw std::runtime_error("候选人 PCM 必须是非空且字节数为偶数的 s16le 数据。");
     }
 
-    // 音频包不是 JSON 事件：optional 区域只携带 sequence，payload 是原始 PCM。
-    // session 已由 StartSession 绑定到当前 WebSocket，因此这里遵从既有 sequence-frame 编解码规则。
+    // Realtime Dialogue 的麦克风包必须携带 TaskRequest(200) 和 session_id。
+    // 旧实现误用了 sequence flag，服务端无法把 PCM 归属到当前会话，因此不会产生 ASR 事件。
     VolcRealtimeFrame frame;
     frame.message_type = VolcRealtimeMessageType::kAudioOnlyRequest;
-    frame.flag = VolcRealtimeMessageFlag::kPositiveSequence;
+    frame.flag = VolcRealtimeMessageFlag::kEvent;
     frame.serialization = VolcRealtimeSerialization::kRaw;
     frame.compression = VolcRealtimeCompression::kNone;
-    frame.sequence = next_audio_sequence_++;
+    frame.event_id = VolcRealtimeEventId::kTaskRequest;
+    frame.session_id = config_.session_id;
     frame.payload = pcm_s16le;
     transport_->sendBinary(encodeVolcRealtimeFrame(frame));
 }
@@ -147,9 +151,27 @@ VolcRealtimeFrame VolcRealtimeClient::receiveFrame() {
     if (frame.message_type == VolcRealtimeMessageType::kErrorInformation) {
         // 供应商错误 frame 表示本轮调用已经失败，底层 client 用异常暴露；
         // adapter 层会再把异常转换成项目内部 kError 事件。
-        throw std::runtime_error("火山 realtime 返回错误 frame。");
+        const std::string payload(frame.payload.begin(), frame.payload.end());
+        throw std::runtime_error(
+            "火山 realtime 返回错误 frame，code=" + std::to_string(frame.code.value_or(0)) +
+            "，payload=" + payload.substr(0, 1024));
+    }
+    if (frame.event_id.has_value()) {
+        // 只记录事件类型和长度，不记录 ASR 文本、候选人回答或 TTS 字节。
+        // TTSResponse 数量较多，降为 debug，避免正常面试日志被 PCM 块刷屏。
+        if (*frame.event_id == VolcRealtimeEventId::kTtsResponse) {
+            LOG_DEBUG("收到火山事件 {} payload_bytes={}", volcRealtimeEventIdToKey(*frame.event_id),
+                      frame.payload.size());
+        } else {
+            LOG_INFO("收到火山事件 {} payload_bytes={}", volcRealtimeEventIdToKey(*frame.event_id),
+                     frame.payload.size());
+        }
     }
     return frame;
+}
+
+bool VolcRealtimeClient::hasPendingFrame() const {
+    return transport_->hasPendingMessage();
 }
 
 std::vector<VolcRealtimeFrame> VolcRealtimeClient::receiveUntilEvent(VolcRealtimeEventId event_id) {
@@ -199,6 +221,9 @@ void VolcRealtimeClient::sendJsonEvent(VolcRealtimeEventId event_id, const std::
 
     // 先编码为火山二进制 frame，再交给 transport 发送。client 不直接碰 Boost.Beast socket。
     transport_->sendBinary(encodeVolcRealtimeFrame(frame));
+    // 只记录事件 ID 和字节数，ChatTTSText 的面试问题正文不进入日志。
+    LOG_INFO("发送火山事件 {} payload_bytes={}", volcRealtimeEventIdToKey(event_id),
+             payload.size());
 }
 
 void VolcRealtimeClient::validateConfig() const {
@@ -225,8 +250,10 @@ void VolcRealtimeClient::validateConfig() const {
     if (config_.model.empty()) {
         throw std::runtime_error("火山 realtime model 不能为空。");
     }
-    if (config_.input_mod != "text" && config_.input_mod != "audio") {
-        throw std::runtime_error("火山 realtime input_mod 只能是 text 或 audio。");
+    if (config_.input_mod != "text" && config_.input_mod != "keep_alive" &&
+        config_.input_mod != "push_to_talk" && config_.input_mod != "audio_file") {
+        throw std::runtime_error(
+            "火山 realtime input_mod 只能是 text、keep_alive、push_to_talk 或 audio_file。");
     }
     if (config_.speaker.empty()) {
         throw std::runtime_error("火山 realtime speaker 不能为空。");

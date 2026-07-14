@@ -3,6 +3,7 @@
 #include "common/realtime_protocol.h"
 #include "services/audio/audio_device.h"
 
+#include <optional>
 #include <string>
 
 namespace interview {
@@ -19,8 +20,15 @@ class IRealtimeClient {
     // 判断是否还有可消费的服务端事件；真实实现可以映射为阻塞读取或事件队列。
     virtual bool hasNextEvent() const = 0;
 
+    // 返回最近一次失败的可展示原因。实现不得包含鉴权 header 或密钥值。
+    virtual std::string getLastErrorMessage() const = 0;
+
     // 取出下一条业务事件。调用方应先检查 hasNextEvent，避免空队列读取。
     virtual common::RealtimeEvent receiveNextEvent() = 0;
+
+    // 非阻塞读取一条已经到达的业务事件。真实音频循环使用该入口，等待服务端期间仍可
+    // 持续排空麦克风队列；暂时没有事件时返回 std::nullopt。
+    virtual std::optional<common::RealtimeEvent> tryReceiveNextEvent() = 0;
 
     // 发送面试官文本；后续真实实现会把它转成 TTS 或服务端 response 指令。
     virtual bool sendInterviewerText(const std::string& text) = 0;

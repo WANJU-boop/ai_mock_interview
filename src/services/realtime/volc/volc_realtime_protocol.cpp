@@ -251,6 +251,10 @@ std::vector<std::uint8_t> encodeVolcRealtimeFrame(const VolcRealtimeFrame& frame
                 throw std::invalid_argument("火山 Session 事件必须携带 session id。");
             }
             appendSizedString(bytes, frame.session_id, "session_id");
+        } else if (!frame.connect_id.empty()) {
+            // Connect ID 在连接级事件中是可选字段。StartConnection 通常不写，
+            // 但服务端 ConnectionStarted 可能回传，因此协议对象必须能完整表示。
+            appendSizedString(bytes, frame.connect_id, "connect_id");
         }
     }
 
@@ -305,6 +309,31 @@ VolcRealtimeFrame decodeVolcRealtimeFrame(const std::vector<std::uint8_t>& bytes
                 std::string(bytes.begin() + static_cast<std::ptrdiff_t>(offset),
                             bytes.begin() + static_cast<std::ptrdiff_t>(offset + session_id_size));
             offset += session_id_size;
+        } else {
+            // Connect 级事件的 connect_id 是可选的，协议没有单独 flag。
+            // 如果当前长度字段直接覆盖到 frame 末尾，它就是 payload size；
+            // 否则只有“connect_id + 第二个长度字段 + payload”能严格消费全包时才按 ID 解析。
+            ensureAvailable(bytes, offset, 4, "connect id or payload size");
+            const std::uint32_t candidate_id_size = readUint32(bytes, offset);
+            const std::size_t candidate_id_offset = offset + 4;
+            if (candidate_id_size <= bytes.size() - candidate_id_offset) {
+                const std::size_t candidate_payload_size_offset =
+                    candidate_id_offset + candidate_id_size;
+                if (candidate_payload_size_offset + 4 <= bytes.size()) {
+                    const std::uint32_t candidate_payload_size =
+                        readUint32(bytes, candidate_payload_size_offset);
+                    if (candidate_payload_size <=
+                            bytes.size() - candidate_payload_size_offset - 4 &&
+                        candidate_payload_size_offset + 4 + candidate_payload_size ==
+                            bytes.size()) {
+                        frame.connect_id = std::string(
+                            bytes.begin() + static_cast<std::ptrdiff_t>(candidate_id_offset),
+                            bytes.begin() +
+                                static_cast<std::ptrdiff_t>(candidate_payload_size_offset));
+                        offset = candidate_payload_size_offset;
+                    }
+                }
+            }
         }
     }
 

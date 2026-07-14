@@ -4,6 +4,9 @@
 #include "services/audio/audio_device.h"
 #include "services/realtime/realtime_client.h"
 
+#include <chrono>
+#include <cstddef>
+
 namespace interview {
 namespace session {
 
@@ -23,6 +26,12 @@ class RealtimeAudioBridge final {
     bool pumpCapturedAudio();
     // 消费带 PCM payload 的面试官事件并送到播放队列。非音频事件无需处理，返回 true。
     bool consumeRealtimeEvent(const common::RealtimeEvent& event);
+    // 发送面试官文本前暂停真实麦克风上传；期间仍发送静音保活，避免扬声器回放被 ASR 当成候选人回答。
+    void suspendCaptureForwarding();
+    // LLM 评分期间只暂停麦克风，不增加待完成 TTS 计数。
+    void muteCaptureForwarding();
+    // 结束语只有在服务端 TTS 结束且本地播放队列清空后才能关闭。
+    bool isInterviewerPlaybackComplete() const;
     // 停止设备。该入口幂等，DialogOrchestrator 的正常、错误和析构路径都可调用。
     void stop();
 
@@ -32,6 +41,15 @@ class RealtimeAudioBridge final {
     services::AudioPcmFormat capture_format_;
     services::AudioPcmFormat playback_format_;
     bool started_ = false;
+    bool capture_forwarding_enabled_ = false;
+    bool resume_capture_after_playback_ = false;
+    std::size_t pending_interviewer_utterances_ = 0;
+    // 只用于低频诊断麦克风是否采到非静音数据，不保存任何录音内容。
+    std::size_t forwarded_capture_chunks_ = 0;
+    // 统计本轮收到的采样数量，用于提示实际播放时长，不保存 PCM 内容。
+    std::size_t current_tts_samples_ = 0;
+    std::chrono::steady_clock::time_point tts_playback_started_at_{};
+    std::chrono::steady_clock::time_point capture_resume_deadline_{};
 };
 
 } // namespace session

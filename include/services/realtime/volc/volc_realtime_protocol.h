@@ -111,6 +111,8 @@ struct VolcRealtimeFrame {
     std::optional<std::int32_t> sequence;
     // 事件 frame 使用 event_id；没有 event_id 的 frame 通常是 sequence 或错误 frame。
     std::optional<VolcRealtimeEventId> event_id;
+    // Connect 级服务端事件可携带 connect_id；客户端 StartConnection 可以留空。
+    std::string connect_id;
     // Session 级事件必须携带 session_id；Connection 级事件不携带。
     std::string session_id;
     // payload 始终是原始字节，避免协议层错误地假设所有 payload 都是 JSON。

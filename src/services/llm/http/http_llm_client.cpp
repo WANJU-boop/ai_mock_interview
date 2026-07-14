@@ -38,9 +38,13 @@ bool startsWith(const std::string& value, const std::string& prefix) {
     return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
 }
 
-// 配置文件只保存环境变量名，真实 API key 从进程环境读取。
-// 这样可以避免把密钥写进仓库、测试 fixture 或日志里。
+// 用户明确要求可在 config.local.json 直写密钥；该文件必须保持 Git ignored。
+// 为了不破坏部署环境，直写值为空时仍支持从环境变量读取。
 std::string requireApiKey(const common::LlmConfig& config) {
+    if (!config.api_key.empty()) {
+        return config.api_key;
+    }
+
     const char* api_key = std::getenv(config.api_key_env.c_str());
     if (api_key == nullptr || std::string(api_key).empty()) {
         throw std::runtime_error("HTTP LLM API key 对应的环境变量未设置：" + config.api_key_env);
@@ -224,8 +228,8 @@ void validateHttpConfig(const common::LlmConfig& config) {
     if (!startsWith(config.base_url, "https://")) {
         throw std::runtime_error("HttpLlmClient 要求 llm.base_url 以 https:// 开头");
     }
-    if (config.api_key_env.empty()) {
-        throw std::runtime_error("HttpLlmClient 要求 llm.api_key_env 不能为空");
+    if (config.api_key.empty() && config.api_key_env.empty()) {
+        throw std::runtime_error("HttpLlmClient 要求 llm.api_key 或 api_key_env 至少配置一个");
     }
     if (config.timeout_ms <= 0) {
         throw std::runtime_error("HttpLlmClient 要求 llm.timeout_ms 必须是正数");

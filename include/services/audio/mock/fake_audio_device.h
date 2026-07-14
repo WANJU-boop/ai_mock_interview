@@ -19,6 +19,7 @@ class FakeAudioDevice final : public IAudioDevice {
     bool startPlayback(const AudioPcmFormat& format) override;
     std::optional<AudioPcmChunk> tryReadCapturedChunk() override;
     bool playPcmChunk(const AudioPcmChunk& chunk) override;
+    bool hasPendingPlayback() const override;
     void stop() override;
 
     // 下列只读查询仅用于测试和手动 demo，生产设备不应把内部音频缓存暴露给业务层。
@@ -26,6 +27,8 @@ class FakeAudioDevice final : public IAudioDevice {
     bool isCaptureStarted() const;
     bool isPlaybackStarted() const;
     bool isStopped() const;
+    // 模拟底层播放状态无法归零，只用于验证音频桥的截止时间兜底。
+    void setPlaybackPendingForTesting(bool pending);
 
   private:
     std::vector<AudioPcmChunk> captured_chunks_;
@@ -36,6 +39,7 @@ class FakeAudioDevice final : public IAudioDevice {
     bool capture_started_ = false;
     bool playback_started_ = false;
     bool stopped_ = false;
+    bool playback_pending_for_testing_ = false;
 };
 
 } // namespace services

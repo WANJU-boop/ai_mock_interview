@@ -37,6 +37,11 @@ class FakeVolcRealtimeTransport final : public interview::services::IVolcRealtim
         return frame;
     }
 
+    bool hasPendingMessage() const override {
+        // 非阻塞 adapter 测试用该队列模拟 socket 当前已有完整帧到达。
+        return !incoming_frames.empty();
+    }
+
     void close() override {
         closed = true;
     }
@@ -181,8 +186,9 @@ TEST(VolcRealtimeClientAdapterTest, ConnectStartsVolcConnectionAndExposesConnect
     EXPECT_EQ(event.type, interview::common::RealtimeEventType::kConnected);
 }
 
-// 验证 sendInterviewerText 通过 ChatTTSText 下发两包文本合成请求，保持 IRealtimeClient 接口不变。
-TEST(VolcRealtimeClientAdapterTest, SendInterviewerTextUsesChatTtsTextFrames) {
+// 验证开场文本用 SayHello，后续文本才转成 ChatTTSText 的开始/结束两包。
+// 这个顺序满足火山“ChatTTSText 只能在用户 query 后发送”的协议约束。
+TEST(VolcRealtimeClientAdapterTest, RoutesOpeningToSayHelloAndLaterTextToChatTts) {
     const std::shared_ptr<FakeVolcRealtimeTransport> transport =
         std::make_shared<FakeVolcRealtimeTransport>();
     transport->incoming_frames.push_back(
@@ -193,15 +199,18 @@ TEST(VolcRealtimeClientAdapterTest, SendInterviewerTextUsesChatTtsTextFrames) {
     interview::services::VolcRealtimeClientAdapter adapter(makeConfig(), transport);
 
     ASSERT_TRUE(adapter.connect());
-    ASSERT_TRUE(adapter.sendInterviewerText("请回答第一题。"));
+    ASSERT_TRUE(adapter.sendInterviewerText("欢迎你，请回答第一题。"));
+    ASSERT_TRUE(adapter.sendInterviewerText("请回答第二题。"));
 
-    ASSERT_EQ(transport->sent_frames.size(), 4u);
-    const interview::services::VolcRealtimeFrame first_tts = decodeSentFrame(transport, 2);
-    const interview::services::VolcRealtimeFrame end_tts = decodeSentFrame(transport, 3);
+    ASSERT_EQ(transport->sent_frames.size(), 5u);
+    const interview::services::VolcRealtimeFrame say_hello = decodeSentFrame(transport, 2);
+    const interview::services::VolcRealtimeFrame first_tts = decodeSentFrame(transport, 3);
+    const interview::services::VolcRealtimeFrame end_tts = decodeSentFrame(transport, 4);
+    EXPECT_EQ(say_hello.event_id, interview::services::VolcRealtimeEventId::kSayHello);
     EXPECT_EQ(first_tts.event_id, interview::services::VolcRealtimeEventId::kChatTtsText);
     EXPECT_EQ(end_tts.event_id, interview::services::VolcRealtimeEventId::kChatTtsText);
     EXPECT_NE(
-        std::string(first_tts.payload.begin(), first_tts.payload.end()).find("请回答第一题。"),
+        std::string(first_tts.payload.begin(), first_tts.payload.end()).find("请回答第二题。"),
         std::string::npos);
     EXPECT_NE(std::string(end_tts.payload.begin(), end_tts.payload.end()).find(R"("end":true)"),
               std::string::npos);
@@ -217,7 +226,7 @@ TEST(VolcRealtimeClientAdapterTest, SendsCandidateAudioAsLittleEndianPcm) {
     transport->incoming_frames.push_back(
         makeServerEvent(interview::services::VolcRealtimeEventId::kSessionStarted));
     interview::services::VolcRealtimeRuntimeConfig config = makeConfig();
-    config.input_mod = "audio";
+    config.input_mod = "keep_alive";
     interview::services::VolcRealtimeClientAdapter adapter(config, transport);
     interview::services::AudioPcmChunk chunk;
     chunk.samples = {1, -2};
@@ -244,6 +253,9 @@ TEST(VolcRealtimeClientAdapterTest, ReceivesMappedEventsUntilClosed) {
         makeServerEvent(interview::services::VolcRealtimeEventId::kAsrResponse,
                         R"({"results":[{"text":"最终回答","is_interim":false}]})"));
     transport->incoming_frames.push_back(
+        // 官方要求收到 ASREnded 后才能发 ChatTTSText，adapter 到这一帧才交付 final。
+        makeServerEvent(interview::services::VolcRealtimeEventId::kAsrEnded));
+    transport->incoming_frames.push_back(
         // 最后一帧关闭 session，adapter 应该转成 kClosed 并让 hasNextEvent 变 false。
         makeServerEvent(interview::services::VolcRealtimeEventId::kSessionFinished));
     interview::services::VolcRealtimeClientAdapter adapter(makeConfig(), transport);
@@ -258,4 +270,40 @@ TEST(VolcRealtimeClientAdapterTest, ReceivesMappedEventsUntilClosed) {
     const interview::common::RealtimeEvent closed = adapter.receiveNextEvent();
     EXPECT_EQ(closed.type, interview::common::RealtimeEventType::kClosed);
     EXPECT_FALSE(adapter.hasNextEvent());
+}
+
+// 验证只播放客户通过 ChatTTSText 请求的音频，丢弃火山端到端模型自动生成的 default 闲聊。
+// 这个边界避免一次回答后同时播放两套面试官内容。
+TEST(VolcRealtimeClientAdapterTest, ForwardsOnlyClientTextTtsAudio) {
+    const std::shared_ptr<FakeVolcRealtimeTransport> transport =
+        std::make_shared<FakeVolcRealtimeTransport>();
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kConnectionStarted));
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kSessionStarted));
+    interview::services::VolcRealtimeClientAdapter adapter(makeConfig(), transport);
+    ASSERT_TRUE(adapter.connect());
+    ASSERT_TRUE(adapter.tryReceiveNextEvent().has_value()); // 消费本地 kConnected。
+
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kTtsSentenceStart,
+                        R"({"tts_type":"default","text":"火山自动回答"})"));
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kTtsResponse, "ignored-pcm"));
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kTtsEnded));
+    EXPECT_FALSE(adapter.tryReceiveNextEvent().has_value());
+
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kTtsSentenceStart,
+                        R"({"tts_type":"chat_tts_text","text":"第一题"})"));
+    transport->incoming_frames.push_back(
+        makeServerEvent(interview::services::VolcRealtimeEventId::kTtsResponse, "pcm"));
+
+    const std::optional<interview::common::RealtimeEvent> started = adapter.tryReceiveNextEvent();
+    const std::optional<interview::common::RealtimeEvent> audio = adapter.tryReceiveNextEvent();
+    ASSERT_TRUE(started.has_value());
+    ASSERT_TRUE(audio.has_value());
+    EXPECT_EQ(started->type, interview::common::RealtimeEventType::kTtsStarted);
+    EXPECT_EQ(audio->payload, (std::vector<std::uint8_t>{'p', 'c', 'm'}));
 }

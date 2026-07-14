@@ -113,6 +113,24 @@ TEST(HttpLlmClientTest, BuildsQuestionRequestAndParsesStructuredQuestionResponse
     EXPECT_NE(transport->last_request.body.find("C++ Intern"), std::string::npos);
 }
 
+// 验证本地直写 API key 优先于环境变量回退，且只进入 Authorization header。
+// 这个测试使用 fake transport，不会真正访问网络或泄露密钥。
+TEST(HttpLlmClientTest, UsesDirectLocalApiKeyWithoutEnvironmentVariable) {
+    const std::shared_ptr<FakeHttpTransport> transport = std::make_shared<FakeHttpTransport>();
+    transport->next_response = {200, R"({"questions":["Question A"]})"};
+    interview::common::LlmConfig config = makeHttpConfig();
+    config.api_key = "fake-direct-key";
+    config.api_key_env.clear();
+    interview::services::HttpLlmClient client(config, transport);
+
+    const std::vector<std::string> questions =
+        client.generateQuestions({"Demo Candidate", "C++ Intern", 1});
+
+    ASSERT_EQ(questions.size(), 1u);
+    EXPECT_EQ(findHeaderValue(transport->last_request.headers, "Authorization"),
+              "Bearer fake-direct-key");
+}
+
 // 验证简历摘要会进入 HTTP 题目生成 prompt，同时仍然通过同一个 fake transport 离线测试。
 TEST(HttpLlmClientTest, IncludesResumeContextInQuestionRequestBody) {
     ScopedEnvVar api_key("TEST_OPENAI_API_KEY", "fake-api-key");

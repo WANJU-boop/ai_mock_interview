@@ -164,8 +164,8 @@ void validateLlmConfig(const AppConfig& config) {
     if (!startsWith(config.llm.base_url, "https://")) {
         throw std::runtime_error("HTTP provider 要求 llm.base_url 以 https:// 开头");
     }
-    if (config.llm.api_key_env.empty()) {
-        throw std::runtime_error("HTTP provider 要求 llm.api_key_env 不能为空");
+    if (config.llm.api_key.empty() && config.llm.api_key_env.empty()) {
+        throw std::runtime_error("HTTP provider 要求 llm.api_key 或 llm.api_key_env 至少配置一个");
     }
     if (config.llm.max_prompt_context_chars <= 0) {
         throw std::runtime_error("HTTP provider 要求 llm.max_prompt_context_chars 必须是正数");
@@ -185,28 +185,33 @@ void validateRealtimeConfig(const AppConfig& config) {
 
     // 真实 realtime provider 的安全边界在配置层先检查：
     // 1. endpoint 必须是加密 WSS
-    // 2. 配置文件只保存环境变量名
-    // 3. input_mod 只能选择已实现的 text/audio 两种模式，音频模式还会校验本地 PCM 约定。
+    // 2. 鉴权可来自本地直写值或环境变量
+    // 3. 当前完整语音面试使用 keep_alive，持续发送 20ms PCM/静音保活包。
     if (config.realtime.connection.endpoint.empty()) {
         throw std::runtime_error("volc realtime 要求 realtime.connection.endpoint 不能为空");
     }
     if (!startsWith(config.realtime.connection.endpoint, "wss://")) {
         throw std::runtime_error("volc realtime 要求 realtime.connection.endpoint 以 wss:// 开头");
     }
-    if (config.realtime.connection.app_id_env.empty()) {
-        throw std::runtime_error("volc realtime 要求 realtime.connection.app_id_env 不能为空");
+    if (config.realtime.connection.app_id.empty() &&
+        config.realtime.connection.app_id_env.empty()) {
+        throw std::runtime_error(
+            "volc realtime 要求 realtime.connection.app_id 或 app_id_env 至少配置一个");
     }
-    if (config.realtime.connection.access_key_env.empty()) {
-        throw std::runtime_error("volc realtime 要求 realtime.connection.access_key_env 不能为空");
+    if (config.realtime.connection.access_key.empty() &&
+        config.realtime.connection.access_key_env.empty()) {
+        throw std::runtime_error(
+            "volc realtime 要求 realtime.connection.access_key 或 access_key_env 至少配置一个");
     }
-    if (config.realtime.dialog.input_mod != "text" && config.realtime.dialog.input_mod != "audio") {
-        throw std::runtime_error("realtime.dialog.input_mod 只能是 text 或 audio");
+    if (config.realtime.dialog.input_mod != "text" &&
+        config.realtime.dialog.input_mod != "keep_alive") {
+        throw std::runtime_error("realtime.dialog.input_mod 只能是 text 或 keep_alive");
     }
-    if (config.realtime.dialog.input_mod == "audio" &&
+    if (config.realtime.dialog.input_mod == "keep_alive" &&
         config.realtime.tts.audio_format != "pcm_s16le") {
         // 当前播放器和火山 audio frame 都以 signed 16-bit little-endian PCM 为唯一实现约定。
         // 不静默转换未知格式，避免语音内容被错误解码却表面上“播放成功”。
-        throw std::runtime_error("audio 模式当前要求 realtime.tts.audio_format=pcm_s16le");
+        throw std::runtime_error("keep_alive 模式当前要求 realtime.tts.audio_format=pcm_s16le");
     }
     if (config.realtime.tts.audio_format.empty()) {
         throw std::runtime_error("volc realtime 要求 realtime.tts.audio_format 不能为空");
@@ -283,6 +288,7 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
     config.llm.provider = requireString(llm, "provider");
     config.llm.model = requireString(llm, "model");
     config.llm.base_url = readOptionalString(llm, "base_url");
+    config.llm.api_key = readOptionalString(llm, "api_key");
     config.llm.api_key_env = readOptionalString(llm, "api_key_env");
     config.llm.timeout_ms = readPositiveIntWithDefault(llm, "timeout_ms", 30000);
     config.llm.max_prompt_context_chars = readPositiveIntWithDefault(
@@ -308,6 +314,8 @@ AppConfig loadConfigFromFile(const std::string& file_path) {
             const nlohmann::json& connection = requireObject(realtime, "connection");
             config.realtime.connection.endpoint = readOptionalStringWithDefault(
                 connection, "endpoint", config.realtime.connection.endpoint);
+            config.realtime.connection.app_id = readOptionalString(connection, "app_id");
+            config.realtime.connection.access_key = readOptionalString(connection, "access_key");
             config.realtime.connection.app_id_env = readOptionalStringWithDefault(
                 connection, "app_id_env", config.realtime.connection.app_id_env);
             config.realtime.connection.access_key_env = readOptionalStringWithDefault(

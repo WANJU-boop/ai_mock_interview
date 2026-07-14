@@ -17,7 +17,7 @@ struct InterviewConfig {
     int question_count = 0;
 };
 
-// LLM provider 配置。真实密钥只通过 api_key_env 指向环境变量，不进入配置对象。
+// LLM provider 配置。优先使用本地直写值，未配置时再回退到环境变量。
 struct LlmConfig {
     // provider 当前支持 mock 和 http；mock 保证默认学习流程可以完全离线运行。
     std::string provider;
@@ -25,7 +25,9 @@ struct LlmConfig {
     std::string model;
     // 真实 HTTP 客户端默认按 OpenAI 兼容接口拼接 /chat/completions。
     std::string base_url;
-    // 只保存环境变量名，不在配置文件里放真实 API key。
+    // api_key 只允许写入被 Git 忽略的 config.local.json，不得复制到 example 或日志。
+    std::string api_key;
+    // api_key 为空时，通过该名称从环境变量读取。
     std::string api_key_env;
     // 超时统一用毫秒表示，后续真实网络实现和手动集成都复用这一个字段。
     int timeout_ms = 30000;
@@ -41,11 +43,14 @@ struct ReportConfig {
     std::string output_directory = "reports";
 };
 
-// Realtime 连接和鉴权来源。这里只保存环境变量名，不保存解析后的真实密钥。
+// Realtime 连接和鉴权来源。本地直写值优先，环境变量用作回退方案。
 struct RealtimeConnectionConfig {
     // 火山 realtime WSS 地址；真实 provider 必须使用加密的 wss://。
     std::string endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
-    // 只保存环境变量名，真实 App ID 和 Access Key 由本地 shell 注入，不能提交到仓库。
+    // app_id/access_key 只允许出现在被 Git 忽略的 config.local.json。
+    std::string app_id;
+    std::string access_key;
+    // 直写值为空时，才从这两个环境变量名取值。
     std::string app_id_env = "VOLC_APP_ID";
     std::string access_key_env = "VOLC_ACCESS_KEY";
     // resource_id 和 app_key 是火山握手所需的能力标识，不是运行时生成的连接 ID。
@@ -59,7 +64,7 @@ struct RealtimeConnectionConfig {
 struct RealtimeDialogConfig {
     // 火山模型版本可由本地配置覆盖，切换模型不需要修改协议代码。
     std::string model = "1.2.1.1";
-    // text 使用键盘/文本输入；audio 启动 PortAudio 采集并把 PCM 块流式送给 ASR。
+    // text 使用文本输入；keep_alive 持续上传 PortAudio PCM，适合当前自动语音面试。
     std::string input_mod = "text";
     // 审核和联网搜索是供应商会话选项，集中配置后不再隐藏在 JSON payload 构造代码里。
     bool strict_audit = true;

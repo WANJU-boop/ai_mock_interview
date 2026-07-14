@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
                 report_output_directory);
         }
 
-        if (config.realtime.dialog.input_mod == "audio") {
+        if (config.realtime.dialog.input_mod == "keep_alive") {
             // PortAudio callback 只写/读内部 PCM 队列；runConfiguredRealtimeInterview
             // 所在的当前线程 是 realtime client 唯一所有者。将来 Qt 必须把整个调用迁入可 join 的
             // worker。
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
                 &audio_bridge, report_output_directory);
         }
 
-        // text 模式继续保留最小 WSS smoke test，避免在没有麦克风的机器上误进入完整音频循环。
+        // text 模式继续保留最小 WSS smoke test，完整语音面试必须显式配置 keep_alive。
         return interview::app::runRealtimeConnectionSmoke(std::cout, *realtime_client,
                                                           config.realtime.provider);
     } catch (const std::exception& error) {
