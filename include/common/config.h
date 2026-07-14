@@ -17,7 +17,7 @@ struct InterviewConfig {
     int question_count = 0;
 };
 
-// LLM provider 配置。真实密钥只通过 api_key_env 指向环境变量，不进入配置对象。
+// LLM provider 配置。优先使用本地直写值，未配置时再回退到环境变量。
 struct LlmConfig {
     // provider 当前支持 mock 和 http；mock 保证默认学习流程可以完全离线运行。
     std::string provider;
@@ -25,17 +25,32 @@ struct LlmConfig {
     std::string model;
     // 真实 HTTP 客户端默认按 OpenAI 兼容接口拼接 /chat/completions。
     std::string base_url;
-    // 只保存环境变量名，不在配置文件里放真实 API key。
+    // api_key 只允许写入被 Git 忽略的 config.local.json，不得复制到 example 或日志。
+    std::string api_key;
+    // api_key 为空时，通过该名称从环境变量读取。
     std::string api_key_env;
     // 超时统一用毫秒表示，后续真实网络实现和手动集成都复用这一个字段。
     int timeout_ms = 30000;
+    // 简历上下文进入 LLM 前的最大字符数。限制输入规模，避免超长 PDF 把请求、成本和隐私暴露面放大。
+    int max_prompt_context_chars = 8000;
 };
 
-// Realtime 连接和鉴权来源。这里只保存环境变量名，不保存解析后的真实密钥。
+// 报告导出配置只描述本地文件策略，不保存候选人正文或任何运行时文件句柄。
+struct ReportConfig {
+    // 默认保存结构化 JSON，最终报告仍由用户本地目录持有，不会上传到外部服务。
+    bool save_json = true;
+    // 文件名在运行时按时间和序号生成，不使用候选人姓名，避免把个人信息带进文件路径。
+    std::string output_directory = "reports";
+};
+
+// Realtime 连接和鉴权来源。本地直写值优先，环境变量用作回退方案。
 struct RealtimeConnectionConfig {
     // 火山 realtime WSS 地址；真实 provider 必须使用加密的 wss://。
     std::string endpoint = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
-    // 只保存环境变量名，真实 App ID 和 Access Key 由本地 shell 注入，不能提交到仓库。
+    // app_id/access_key 只允许出现在被 Git 忽略的 config.local.json。
+    std::string app_id;
+    std::string access_key;
+    // 直写值为空时，才从这两个环境变量名取值。
     std::string app_id_env = "VOLC_APP_ID";
     std::string access_key_env = "VOLC_ACCESS_KEY";
     // resource_id 和 app_key 是火山握手所需的能力标识，不是运行时生成的连接 ID。
@@ -49,7 +64,7 @@ struct RealtimeConnectionConfig {
 struct RealtimeDialogConfig {
     // 火山模型版本可由本地配置覆盖，切换模型不需要修改协议代码。
     std::string model = "1.2.1.1";
-    // 当前项目还没有音频边界，先只允许 text 模式；audio 模式等 PortAudio 阶段再打开。
+    // text 使用文本输入；keep_alive 持续上传 PortAudio PCM，适合当前自动语音面试。
     std::string input_mod = "text";
     // 审核和联网搜索是供应商会话选项，集中配置后不再隐藏在 JSON payload 构造代码里。
     bool strict_audit = true;
@@ -65,6 +80,17 @@ struct RealtimeTtsConfig {
     int channels = 1;
 };
 
+// 本地麦克风采集配置。它与服务端 TTS 输出分开：前者决定录音帧如何产生，
+// 后者决定收到的语音如何播放，二者的采样率不要求相同。
+struct RealtimeAudioConfig {
+    // ASR 输入使用单声道 PCM；16 kHz 是当前 realtime 音频会话的默认采集格式。
+    int capture_sample_rate_hz = 16000;
+    // 声道数参与 frame 对齐校验；后续设备适配器不得把双声道数据伪装成单声道发送。
+    int capture_channels = 1;
+    // 每次从设备读取的帧数。它只控制延迟与调用频率，不属于服务端协议字段。
+    int frames_per_buffer = 320;
+};
+
 // Realtime provider 配置只聚合可持久化的用户设置，不持有 WebSocket、密钥值或运行时 ID。
 struct RealtimeConfig {
     // mock 是默认 provider，保证普通构建和单元测试不需要网络、麦克风或服务端账号。
@@ -73,6 +99,8 @@ struct RealtimeConfig {
     RealtimeConnectionConfig connection;
     RealtimeDialogConfig dialog;
     RealtimeTtsConfig tts;
+    // audio 仅描述本地录音格式；设备对象、PortAudio 流和缓存队列均是运行时资源。
+    RealtimeAudioConfig audio;
 };
 
 // 应用级配置把三个模块的配置聚合起来，入口层加载一次后再分别注入对应模块。
@@ -80,6 +108,7 @@ struct AppConfig {
     // 三个子配置按模块边界保存，入口层只把对应部分传给各自 factory/setup。
     InterviewConfig interview;
     LlmConfig llm;
+    ReportConfig report;
     RealtimeConfig realtime;
 };
 

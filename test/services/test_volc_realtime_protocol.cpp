@@ -68,6 +68,25 @@ TEST(VolcRealtimeProtocolTest, DecodesServerChatResponseWithUtf8Payload) {
               R"({"content":"请继续说明你的项目经验。"})");
 }
 
+// 验证服务端 ConnectionStarted 携带可选 connect_id 时不会把 ID 长度误当成 payload 长度。
+// 这是真实握手的第一帧，解析错位会让后续 StartSession 完全无法发送。
+TEST(VolcRealtimeProtocolTest, DecodesConnectionEventWithOptionalConnectId) {
+    interview::services::VolcRealtimeFrame source;
+    source.message_type = interview::services::VolcRealtimeMessageType::kFullServerResponse;
+    source.flag = interview::services::VolcRealtimeMessageFlag::kEvent;
+    source.serialization = interview::services::VolcRealtimeSerialization::kJson;
+    source.event_id = interview::services::VolcRealtimeEventId::kConnectionStarted;
+    source.connect_id = "connect-server-001";
+    source.payload = {'{', '}'};
+
+    const interview::services::VolcRealtimeFrame decoded =
+        interview::services::decodeVolcRealtimeFrame(
+            interview::services::encodeVolcRealtimeFrame(source));
+
+    EXPECT_EQ(decoded.connect_id, "connect-server-001");
+    EXPECT_EQ(decoded.payload, (std::vector<std::uint8_t>{'{', '}'}));
+}
+
 // 验证音频响应 frame 不强行解析 payload，避免 TTSResponse 的二进制音频被误当 JSON。
 TEST(VolcRealtimeProtocolTest, PreservesAudioOnlyResponsePayload) {
     interview::services::VolcRealtimeFrame frame;

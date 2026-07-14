@@ -10,7 +10,12 @@
     "model": "mock-interviewer",
     "base_url": "https://api.openai.com/v1",
     "api_key_env": "OPENAI_API_KEY",
-    "timeout_ms": 30000
+    "timeout_ms": 30000,
+    "max_prompt_context_chars": 8000
+  },
+  "report": {
+    "save_json": true,
+    "output_directory": "reports"
   },
   "realtime": {
     "provider": "mock",
@@ -33,6 +38,11 @@
       "audio_format": "pcm_s16le",
       "sample_rate_hz": 24000,
       "channels": 1
+    },
+    "audio": {
+      "capture_sample_rate_hz": 16000,
+      "capture_channels": 1,
+      "frames_per_buffer": 320
     }
   }
 }

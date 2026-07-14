@@ -4,6 +4,7 @@
 #include "services/realtime/volc/volc_realtime_runtime.h"
 #include "services/realtime/volc/volc_realtime_transport.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -11,7 +12,7 @@
 namespace interview {
 namespace services {
 
-// 火山文本模式客户端负责供应商协议流程：
+// 火山 realtime 客户端负责文本与 PCM 音频两种输入模式的供应商协议流程：
 // 1. 建立 WSS 连接并写入鉴权 header
 // 2. 发送 StartConnection / StartSession / ChatTextQuery / Finish 事件
 // 3. 接收并解码火山 frame
@@ -24,16 +25,20 @@ class VolcRealtimeClient final {
     void connect();
     // 发送连接级开始事件，成功后服务端应返回 ConnectionStarted。
     void startConnection();
-    // 发送文本模式 StartSession，成功后服务端应返回 SessionStarted。
-    void startTextSession();
+    // 发送由 runtime input_mod 决定的 StartSession，成功后服务端应返回 SessionStarted。
+    void startSession();
     // 让服务端主动说一句欢迎语；当前主流程未使用，保留给手动集成验证。
     void sendSayHello(const std::string& content);
     // 把面试官文本交给火山 TTS 合成。adapter 的 sendInterviewerText 会调用它。
     void sendChatTtsText(const std::string& content);
     // 文本模式下候选人输入一句话，客户端用 ChatTextQuery 交给火山对话模型。
     void sendTextQuery(const std::string& content);
+    // audio 模式把一块 PCM S16LE 作为 sequence frame 发给 ASR。每块都必须由同一个 WSS worker 发送。
+    void sendAudioPcm(const std::vector<std::uint8_t>& pcm_s16le);
     // 从 transport 读取并解码一个火山 frame；错误 frame 会转成异常。
     VolcRealtimeFrame receiveFrame();
+    // 非阻塞查询是否已有服务端 frame 可读，供音频循环在收包间隙继续发送 PCM。
+    bool hasPendingFrame() const;
     // 持续读取直到看到指定事件，返回中间所有 frame，便于调用方检查完整服务端响应。
     std::vector<VolcRealtimeFrame> receiveUntilEvent(VolcRealtimeEventId event_id);
     // 文本问答的便利函数：持续读取直到 ChatEnded，表示本轮对话回答结束。

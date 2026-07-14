@@ -1,5 +1,7 @@
 #include "services/llm/http/http_llm_client.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -36,9 +38,13 @@ bool startsWith(const std::string& value, const std::string& prefix) {
     return value.size() >= prefix.size() && value.compare(0, prefix.size(), prefix) == 0;
 }
 
-// 配置文件只保存环境变量名，真实 API key 从进程环境读取。
-// 这样可以避免把密钥写进仓库、测试 fixture 或日志里。
+// 用户明确要求可在 config.local.json 直写密钥；该文件必须保持 Git ignored。
+// 为了不破坏部署环境，直写值为空时仍支持从环境变量读取。
 std::string requireApiKey(const common::LlmConfig& config) {
+    if (!config.api_key.empty()) {
+        return config.api_key;
+    }
+
     const char* api_key = std::getenv(config.api_key_env.c_str());
     if (api_key == nullptr || std::string(api_key).empty()) {
         throw std::runtime_error("HTTP LLM API key 对应的环境变量未设置：" + config.api_key_env);
@@ -73,12 +79,18 @@ std::string requireNonEmptyStringField(const nlohmann::json& object, const std::
         throw std::runtime_error("HTTP LLM 响应缺少字符串字段：" + key);
     }
 
-    const std::string value = object.at(key).get<std::string>();
-    if (value.empty()) {
+    std::string value = object.at(key).get<std::string>();
+    const auto first_non_space =
+        std::find_if_not(value.begin(), value.end(),
+                         [](unsigned char character) { return std::isspace(character) != 0; });
+    const auto last_non_space =
+        std::find_if_not(value.rbegin(), value.rend(),
+                         [](unsigned char character) { return std::isspace(character) != 0; });
+    if (first_non_space == value.end()) {
         throw std::runtime_error("HTTP LLM 响应字段不能为空：" + key);
     }
-
-    return value;
+    // 去掉首尾空白，让 CLI、报告和追问阈值看到稳定的字段；中间空白保持模型原意。
+    return std::string(first_non_space, last_non_space.base());
 }
 
 // 支持两种响应形状：
@@ -109,7 +121,7 @@ nlohmann::json extractStructuredPayload(const nlohmann::json& root) {
 
 // 把 HTTP 响应体转换成领域层需要的题目列表。
 // 所有格式校验都在这里完成，避免 CLI 或 InterviewManager 处理半合法数据。
-std::vector<std::string> parseQuestions(const std::string& response_body) {
+std::vector<std::string> parseQuestions(const std::string& response_body, int expected_count) {
     const nlohmann::json payload =
         extractStructuredPayload(parseJsonOrThrow(response_body, "题目生成响应"));
     const nlohmann::json& questions_json = requireArrayField(payload, "questions");
@@ -121,12 +133,19 @@ std::vector<std::string> parseQuestions(const std::string& response_body) {
             throw std::runtime_error("HTTP LLM 响应的 questions 数组只能包含字符串");
         }
 
-        const std::string question = item.get<std::string>();
+        const nlohmann::json single_question = {{"question", item.get<std::string>()}};
+        const std::string question = requireNonEmptyStringField(single_question, "question");
         if (question.empty()) {
             // 空题目会让交互层打印空白问题，属于模型响应格式错误，必须尽早拒绝。
             throw std::runtime_error("HTTP LLM 响应的 questions 数组不能包含空字符串");
         }
         questions.push_back(question);
+    }
+
+    if (static_cast<int>(questions.size()) != expected_count) {
+        // 题目数量是面试状态机的固定计划。少题或多题都会让 UI
+        // 进度和报告题数产生歧义，不能静默接受。
+        throw std::runtime_error("HTTP LLM 返回的题目数量与请求数量不一致");
     }
 
     return questions;
@@ -158,8 +177,15 @@ nlohmann::json buildQuestionRequestBody(const common::LlmConfig& config,
                          std::to_string(request.question_count) + " 道面向 '" +
                          request.target_role + "' 岗位的简洁中文 C++ 面试题。";
     if (!request.resume_context.empty()) {
+        const std::size_t max_context_chars =
+            static_cast<std::size_t>(config.max_prompt_context_chars);
+        const std::string bounded_context = request.resume_context.substr(0, max_context_chars);
         // 简历上下文只进入私有 prompt，不在日志中输出；要求模型不要把原文复述进题目。
-        prompt += "\n简历上下文（只用于定制题目，不要原文复述）：\n" + request.resume_context;
+        prompt += "\n简历上下文（只用于定制题目，不要原文复述）：\n" + bounded_context;
+        if (bounded_context.size() < request.resume_context.size()) {
+            // 截断标记明确告诉模型上下文不完整，但不会把被截断的敏感内容重新放入请求。
+            prompt += "\n[简历上下文已按长度限制截断]";
+        }
     }
     prompt += "\n返回 JSON，格式为包含字符串数组 questions 的对象。";
 
@@ -202,11 +228,14 @@ void validateHttpConfig(const common::LlmConfig& config) {
     if (!startsWith(config.base_url, "https://")) {
         throw std::runtime_error("HttpLlmClient 要求 llm.base_url 以 https:// 开头");
     }
-    if (config.api_key_env.empty()) {
-        throw std::runtime_error("HttpLlmClient 要求 llm.api_key_env 不能为空");
+    if (config.api_key.empty() && config.api_key_env.empty()) {
+        throw std::runtime_error("HttpLlmClient 要求 llm.api_key 或 api_key_env 至少配置一个");
     }
     if (config.timeout_ms <= 0) {
         throw std::runtime_error("HttpLlmClient 要求 llm.timeout_ms 必须是正数");
+    }
+    if (config.max_prompt_context_chars <= 0) {
+        throw std::runtime_error("HttpLlmClient 要求 llm.max_prompt_context_chars 必须是正数");
     }
 }
 
@@ -257,9 +286,12 @@ HttpLlmClient::HttpLlmClient(const common::LlmConfig& config,
 std::vector<std::string>
 HttpLlmClient::generateQuestions(const QuestionGenerationRequest& request) {
     // 公共接口仍然返回领域层的题目列表；HTTP 请求体和响应包裹格式都被封装在本类内部。
+    if (request.question_count <= 0) {
+        throw std::runtime_error("HTTP LLM 题目请求数量必须是正数");
+    }
     const HttpResponse response =
         sendJsonRequest(config_, transport_, buildQuestionRequestBody(config_, request).dump());
-    return parseQuestions(response.body);
+    return parseQuestions(response.body, request.question_count);
 }
 
 LlmScoreResult HttpLlmClient::scoreAnswer(const AnswerScoringRequest& request) {

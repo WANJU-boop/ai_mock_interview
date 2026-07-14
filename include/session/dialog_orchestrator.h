@@ -3,6 +3,7 @@
 #include "services/realtime/realtime_client.h"
 #include "session/dialog_session.h"
 #include "session/interview_setup.h"
+#include "session/realtime_audio_bridge.h"
 
 #include <string>
 #include <vector>
@@ -31,7 +32,8 @@ class DialogOrchestrator final {
   public:
     // 两个依赖都由外部拥有，且必须比 orchestrator 和同步 run() 活得更久。
     DialogOrchestrator(PreparedInterview& prepared_interview,
-                       services::IRealtimeClient& realtime_client);
+                       services::IRealtimeClient& realtime_client,
+                       RealtimeAudioBridge* audio_bridge = nullptr);
 
     // 运行一次确定性的 realtime 面试；当前实现是同步事件循环，方便先用 mock 测试闭环。
     DialogOrchestratorResult run();
@@ -41,6 +43,8 @@ class DialogOrchestrator final {
     PreparedInterview& prepared_interview_;
     // 接口引用让同一状态机可以由 mock 脚本或真实火山 adapter 驱动。
     services::IRealtimeClient& realtime_client_;
+    // 空指针保持原有 mock/text 流程不变；audio 模式显式注入 bridge，避免 session 自己创建硬件资源。
+    RealtimeAudioBridge* audio_bridge_ = nullptr;
 };
 
 } // namespace session

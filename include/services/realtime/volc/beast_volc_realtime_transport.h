@@ -7,8 +7,8 @@
 namespace interview {
 namespace services {
 
-// 基于 Boost.Beast 的同步 WSS transport。当前作为手动集成入口使用，
-// 默认单元测试只覆盖 VolcRealtimeClient + fake transport，不触发真实网络。
+// 基于 Boost.Beast 的 WSS transport。握手同步完成，之后由内部单一 io_context 线程执行
+// async_read/async_write；业务线程只投递发送包和取完整接收包，不会被 ping 或 TLS 半包卡住。
 class BeastVolcRealtimeTransport final : public IVolcRealtimeTransport {
   public:
     // 构造时只准备实现对象，不联网；真实连接延迟到 connect()。
@@ -18,10 +18,12 @@ class BeastVolcRealtimeTransport final : public IVolcRealtimeTransport {
 
     // 同步完成 DNS、TCP、TLS 和 WebSocket 握手；鉴权 header 只写入握手请求，不写日志。
     void connect(const VolcRealtimeConnectionRequest& request) override;
-    // 把一个完整火山协议 frame 作为 WebSocket binary message 同步发送。
+    // 把一个完整火山协议 frame 投递为 WebSocket binary message；内部异步写队列有容量上限。
     void sendBinary(const std::vector<std::uint8_t>& bytes) override;
     // 阻塞读取一个完整 binary message；网络或协议层错误由异常向上层传播。
     std::vector<std::uint8_t> receiveBinary() override;
+    // 只检查已由 async_read 拼成完整 WebSocket message 的队列，不把控制帧或 TLS 半包算作消息。
+    bool hasPendingMessage() const override;
     // 尝试正常关闭连接并释放资源；允许异常路径重复调用。
     void close() override;
 

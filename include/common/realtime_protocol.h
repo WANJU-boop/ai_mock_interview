@@ -17,6 +17,8 @@ enum class RealtimeEventType {
     kInterviewerText = 4,   // 面试官返回的文本。
     kError = 5,             // realtime 服务发生错误。
     kClosed = 6,            // realtime 连接已经关闭。
+    kTtsStarted = 7,        // 服务端开始一轮 TTS，音频桥应暂时屏蔽真实麦克风。
+    kTtsEnded = 8,          // 服务端一轮 TTS 已发送完成，播放排空后可恢复麦克风。
 };
 
 // 一条 realtime 业务事件。当前阶段只保存文本、错误信息和可选二进制载荷，

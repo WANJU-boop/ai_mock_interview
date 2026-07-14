@@ -9,6 +9,7 @@
     "boost-system",
     "boost-asio",
     "boost-beast",
+    "portaudio",
     "podofo"
   ],
   "overrides": [

@@ -4,6 +4,7 @@
 
 #include <istream>
 #include <ostream>
+#include <string>
 
 namespace interview {
 namespace app {
@@ -11,7 +12,8 @@ namespace app {
 // 运行一次基于终端输入输出流的 mock 面试流程。
 // 这样 main 可以只保留初始化和面试准备逻辑，测试则能用字符串流覆盖完整交互链路。
 int runCliInterview(std::istream& input, std::ostream& output,
-                    session::PreparedInterview& prepared_interview);
+                    session::PreparedInterview& prepared_interview,
+                    const std::string& report_output_directory = "");
 
 } // namespace app
 } // namespace interview

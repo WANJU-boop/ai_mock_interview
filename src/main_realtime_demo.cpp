@@ -1,10 +1,12 @@
 #include "app/realtime_demo_app.h"
 #include "common/config.h"
 #include "common/logger.h"
+#include "services/audio/portaudio/portaudio_audio_device.h"
 #include "services/llm/llm_client_factory.h"
 #include "services/pdf/podofo/podofo_pdf_parser.h"
 #include "services/realtime/realtime_client_factory.h"
 #include "session/interview_setup.h"
+#include "session/realtime_audio_bridge.h"
 
 #include <exception>
 #include <iostream>
@@ -20,13 +22,16 @@ int main(int argc, char* argv[]) {
         argc > 1 ? argv[1] : interview::common::findDefaultConfigPath(argv[0]);
 
     try {
-        const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+        const interview::common::AppConfig config =
+            interview::common::loadConfigFromFile(config_path);
 
-        std::unique_ptr<interview::services::ILlmClient> llm_client = interview::services::createLlmClient(config.llm);
+        std::unique_ptr<interview::services::ILlmClient> llm_client =
+            interview::services::createLlmClient(config.llm);
 
         interview::services::PodofoPdfParser pdf_parser;
 
-        interview::session::PreparedInterview prepared_interview = interview::session::prepareInterview(config.interview, *llm_client, pdf_parser);
+        interview::session::PreparedInterview prepared_interview =
+            interview::session::prepareInterview(config.interview, *llm_client, pdf_parser);
 
         std::vector<interview::common::RealtimeEvent> scripted_events;
 
@@ -36,14 +41,39 @@ int main(int argc, char* argv[]) {
                 prepared_interview.getManager().getQuestionCount());
         }
 
-        std::unique_ptr<interview::services::IRealtimeClient> realtime_client = interview::services::createRealtimeClient(config.realtime, scripted_events);
+        std::unique_ptr<interview::services::IRealtimeClient> realtime_client =
+            interview::services::createRealtimeClient(config.realtime, scripted_events);
+        const std::string report_output_directory =
+            config.report.save_json ? config.report.output_directory : "";
         if (config.realtime.provider == "mock") {
             return interview::app::runConfiguredRealtimeInterview(
-                std::cout, prepared_interview, *realtime_client, config.realtime.provider);
+                std::cout, prepared_interview, *realtime_client, config.realtime.provider, nullptr,
+                report_output_directory);
         }
 
-        // 当前真实火山 provider 只完成 text/WSS 连接和发送文本的闭环。
-        // 完整面试循环需要候选人 transcript，后续接 IAudioDevice/PortAudio 后再打开。
+        if (config.realtime.dialog.input_mod == "keep_alive") {
+            // PortAudio callback 只写/读内部 PCM 队列；runConfiguredRealtimeInterview
+            // 所在的当前线程 是 realtime client 唯一所有者。将来 Qt 必须把整个调用迁入可 join 的
+            // worker。
+            interview::services::PortAudioAudioDevice audio_device;
+            const interview::services::AudioPcmFormat capture_format = {
+                config.realtime.audio.capture_sample_rate_hz,
+                config.realtime.audio.capture_channels,
+                config.realtime.audio.frames_per_buffer,
+            };
+            const interview::services::AudioPcmFormat playback_format = {
+                config.realtime.tts.sample_rate_hz,
+                config.realtime.tts.channels,
+                config.realtime.audio.frames_per_buffer,
+            };
+            interview::session::RealtimeAudioBridge audio_bridge(audio_device, *realtime_client,
+                                                                 capture_format, playback_format);
+            return interview::app::runConfiguredRealtimeInterview(
+                std::cout, prepared_interview, *realtime_client, config.realtime.provider,
+                &audio_bridge, report_output_directory);
+        }
+
+        // text 模式继续保留最小 WSS smoke test，完整语音面试必须显式配置 keep_alive。
         return interview::app::runRealtimeConnectionSmoke(std::cout, *realtime_client,
                                                           config.realtime.provider);
     } catch (const std::exception& error) {

@@ -1,5 +1,8 @@
 // clang-format off
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -108,4 +111,53 @@ TEST(InterviewReportTest, DoesNotModifyDialogSession) {
     EXPECT_EQ(session.getQuestionAnswerRecordCount(), record_count_before);
     ASSERT_FALSE(session.getQuestionAnswerRecords().empty());
     EXPECT_EQ(session.getQuestionAnswerRecords().front().question, first_question_before);
+}
+
+// 验证报告会写进新 JSON 文件且内容与内存序列化一致。文件导出是产品闭环，不能只测试终端打印。
+TEST(InterviewReportTest, SavesReportJsonAtomicallyToNewFile) {
+    interview::session::DialogSession session;
+    session.addQuestionAnswerRecord(makeRecord("问题一", "回答一", 70));
+    const std::filesystem::path output_path = std::filesystem::temp_directory_path() /
+                                              "ai_mock_interview_report_test" / "saved-report.json";
+
+    std::error_code error;
+    std::filesystem::remove(output_path, error);
+    std::filesystem::remove(output_path.string() + ".tmp", error);
+    interview::session::saveInterviewReportJson(session, output_path);
+
+    ASSERT_TRUE(std::filesystem::exists(output_path));
+    std::ifstream input(output_path);
+    nlohmann::json saved_report;
+    input >> saved_report;
+    EXPECT_EQ(saved_report, interview::session::buildInterviewReportJson(session));
+    EXPECT_FALSE(std::filesystem::exists(output_path.string() + ".tmp"));
+}
+
+// 验证导出 API 不覆盖同名报告。报告包含候选人答案，重复运行时宁可失败也不能默默抹掉旧记录。
+TEST(InterviewReportTest, RejectsOverwritingExistingReportFile) {
+    interview::session::DialogSession session;
+    const std::filesystem::path output_path = std::filesystem::temp_directory_path() /
+                                              "ai_mock_interview_report_test" /
+                                              "existing-report.json";
+
+    std::error_code error;
+    std::filesystem::remove(output_path, error);
+    std::filesystem::remove(output_path.string() + ".tmp", error);
+    interview::session::saveInterviewReportJson(session, output_path);
+
+    EXPECT_THROW(interview::session::saveInterviewReportJson(session, output_path),
+                 std::runtime_error);
+}
+
+// 验证自动文件名不会使用候选人数据，且同一进程连续生成时保持不同，避免报告文件相互覆盖。
+TEST(InterviewReportTest, CreatesUniquePrivacyPreservingReportPaths) {
+    const std::filesystem::path first =
+        interview::session::createInterviewReportPath("interview_reports");
+    const std::filesystem::path second =
+        interview::session::createInterviewReportPath("interview_reports");
+
+    EXPECT_NE(first, second);
+    EXPECT_EQ(first.parent_path(), std::filesystem::path("interview_reports"));
+    EXPECT_EQ(first.extension(), ".json");
+    EXPECT_EQ(first.filename().string().find("candidate"), std::string::npos);
 }

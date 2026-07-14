@@ -28,6 +28,10 @@ bool MockRealtimeClient::hasNextEvent() const {
     return connected_ && !closed_ && next_event_index_ < scripted_events_.size();
 }
 
+std::string MockRealtimeClient::getLastErrorMessage() const {
+    return "";
+}
+
 common::RealtimeEvent MockRealtimeClient::receiveNextEvent() {
     if (!hasNextEvent()) {
         throw std::out_of_range("没有可读取的 realtime mock 事件。");
@@ -45,6 +49,14 @@ common::RealtimeEvent MockRealtimeClient::receiveNextEvent() {
     return event;
 }
 
+std::optional<common::RealtimeEvent> MockRealtimeClient::tryReceiveNextEvent() {
+    if (!hasNextEvent()) {
+        return std::nullopt;
+    }
+
+    return receiveNextEvent();
+}
+
 bool MockRealtimeClient::sendInterviewerText(const std::string& text) {
     if (!connected_ || closed_) {
         // 用 false 表示生命周期错误，让编排层走与真实发送失败相同的错误收口。
@@ -56,6 +68,17 @@ bool MockRealtimeClient::sendInterviewerText(const std::string& text) {
     return true;
 }
 
+bool MockRealtimeClient::sendCandidateAudio(const AudioPcmChunk& chunk) {
+    if (!connected_ || closed_ || chunk.samples.empty()) {
+        // 空 PCM 没有时间轴语义，和未连接一样统一返回 false，避免测试误把“没有录到声音”当发送成功。
+        return false;
+    }
+
+    // 按值保存，确保调用方复用录音缓冲区不会影响后续断言。
+    outbound_candidate_audio_chunks_.push_back(chunk);
+    return true;
+}
+
 void MockRealtimeClient::close() {
     // 单向 closed_ 状态使重复清理安全，也防止 close 后再次 connect 复用旧脚本游标。
     closed_ = true;
@@ -63,6 +86,10 @@ void MockRealtimeClient::close() {
 
 const std::vector<std::string>& MockRealtimeClient::getOutboundInterviewerMessages() const {
     return outbound_interviewer_messages_;
+}
+
+const std::vector<AudioPcmChunk>& MockRealtimeClient::getOutboundCandidateAudioChunks() const {
+    return outbound_candidate_audio_chunks_;
 }
 
 bool MockRealtimeClient::isClosed() const {

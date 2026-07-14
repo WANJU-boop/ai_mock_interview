@@ -67,6 +67,10 @@ RealtimeEventType decodeEventType(std::uint8_t raw_type) {
         return RealtimeEventType::kError;
     case static_cast<std::uint8_t>(RealtimeEventType::kClosed):
         return RealtimeEventType::kClosed;
+    case static_cast<std::uint8_t>(RealtimeEventType::kTtsStarted):
+        return RealtimeEventType::kTtsStarted;
+    case static_cast<std::uint8_t>(RealtimeEventType::kTtsEnded):
+        return RealtimeEventType::kTtsEnded;
     default:
         throw std::invalid_argument("未知 realtime 事件类型。");
     }
@@ -157,6 +161,10 @@ std::string realtimeEventTypeToKey(RealtimeEventType type) {
         return "error";
     case RealtimeEventType::kClosed:
         return "closed";
+    case RealtimeEventType::kTtsStarted:
+        return "tts_started";
+    case RealtimeEventType::kTtsEnded:
+        return "tts_ended";
     }
 
     // 这里作为防御性兜底；正常枚举值都应在上面的 switch 中返回。

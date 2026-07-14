@@ -66,9 +66,9 @@ TEST(DialogOrchestratorTest, CompletesSingleQuestionWithoutFollowUp) {
     ASSERT_EQ(result.session.getQuestionAnswerRecordCount(), 1u);
     EXPECT_FALSE(result.session.getQuestionAnswerRecords().front().has_follow_up);
     EXPECT_EQ(result.session.getQuestionAnswerRecords().front().candidate_answer, strongAnswer());
-    ASSERT_GE(result.interviewer_messages.size(), 3u);
+    ASSERT_GE(result.interviewer_messages.size(), 2u);
     EXPECT_NE(result.interviewer_messages[0].find("欢迎你，测试候选人"), std::string::npos);
-    EXPECT_NE(result.interviewer_messages[1].find("问题 1/1："), std::string::npos);
+    EXPECT_NE(result.interviewer_messages[0].find("问题 1/1："), std::string::npos);
     EXPECT_TRUE(realtime_client.isClosed());
 }
 
@@ -96,7 +96,7 @@ TEST(DialogOrchestratorTest, RequestsFollowUpAndStoresUpdatedFinalScore) {
     EXPECT_EQ(record.follow_up_answer,
               "在日志项目练习里，我用 RAII 和测试管理所有权，并记录调试过程。");
     EXPECT_GE(record.final_score.score, 85);
-    EXPECT_NE(result.interviewer_messages[2].find("能不能补充一个来自项目或练习的具体例子？"),
+    EXPECT_NE(result.interviewer_messages[1].find("能不能补充一个来自项目或练习的具体例子？"),
               std::string::npos);
 }
 
@@ -115,9 +115,9 @@ TEST(DialogOrchestratorTest, ProcessesMultipleQuestionsInOrder) {
 
     ASSERT_TRUE(result.success);
     EXPECT_EQ(result.session.getQuestionAnswerRecordCount(), 2u);
-    ASSERT_GE(result.interviewer_messages.size(), 4u);
-    EXPECT_NE(result.interviewer_messages[1].find("问题 1/2："), std::string::npos);
-    EXPECT_NE(result.interviewer_messages[2].find("问题 2/2："), std::string::npos);
+    ASSERT_GE(result.interviewer_messages.size(), 3u);
+    EXPECT_NE(result.interviewer_messages[0].find("问题 1/2："), std::string::npos);
+    EXPECT_NE(result.interviewer_messages[1].find("问题 2/2："), std::string::npos);
 }
 
 // 验证 partial transcript 只用于实时展示，不会提前记录回答或推进评分。

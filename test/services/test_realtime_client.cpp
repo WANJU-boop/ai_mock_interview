@@ -56,6 +56,28 @@ TEST(MockRealtimeClientTest, CapturesOutboundInterviewerMessages) {
     EXPECT_EQ(client.getOutboundInterviewerMessages()[1], "请回答第一题。");
 }
 
+// 验证候选人 PCM 也必须经过 IRealtimeClient，避免未来 PortAudio callback 绕过接口直接写 socket。
+TEST(MockRealtimeClientTest, CapturesOutboundCandidateAudioChunks) {
+    interview::services::MockRealtimeClient client({});
+    interview::services::AudioPcmChunk chunk;
+    chunk.samples = {1, -2, 3, -4};
+
+    ASSERT_TRUE(client.connect());
+    ASSERT_TRUE(client.sendCandidateAudio(chunk));
+
+    ASSERT_EQ(client.getOutboundCandidateAudioChunks().size(), 1u);
+    EXPECT_EQ(client.getOutboundCandidateAudioChunks().front().samples, chunk.samples);
+}
+
+// 验证空 PCM 块被拒绝，防止将“没有录到声音”误记为一段已经发送的 ASR 时间轴。
+TEST(MockRealtimeClientTest, RejectsEmptyCandidateAudioChunk) {
+    interview::services::MockRealtimeClient client({});
+
+    ASSERT_TRUE(client.connect());
+    EXPECT_FALSE(client.sendCandidateAudio({}));
+    EXPECT_TRUE(client.getOutboundCandidateAudioChunks().empty());
+}
+
 // 验证关闭事件会停止读取，避免真实连接关闭后主流程继续消费过期事件。
 TEST(MockRealtimeClientTest, StopsAfterCloseEvent) {
     interview::services::MockRealtimeClient client(

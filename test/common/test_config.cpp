@@ -108,10 +108,16 @@ TEST(ConfigTest, LoadsValidConfig) {
     EXPECT_TRUE(config.llm.base_url.empty());
     EXPECT_TRUE(config.llm.api_key_env.empty());
     EXPECT_EQ(config.llm.timeout_ms, 30000);
+    EXPECT_EQ(config.llm.max_prompt_context_chars, 8000);
+    EXPECT_TRUE(config.report.save_json);
+    EXPECT_EQ(config.report.output_directory, "reports");
     EXPECT_EQ(config.realtime.provider, "mock");
     EXPECT_EQ(config.realtime.dialog.input_mod, "text");
     EXPECT_EQ(config.realtime.connection.timeout_ms, 30000);
     EXPECT_EQ(config.realtime.tts.sample_rate_hz, 24000);
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 16000);
+    EXPECT_EQ(config.realtime.audio.capture_channels, 1);
+    EXPECT_EQ(config.realtime.audio.frames_per_buffer, 320);
 }
 
 // 验证可选简历路径可以从配置进入 InterviewConfig，后续启动阶段再决定是否解析。
@@ -151,7 +157,12 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
                 "model": "gpt-4o-mini",
                 "base_url": "https://api.openai.com/v1",
                 "api_key_env": "OPENAI_API_KEY",
-                "timeout_ms": 45000
+                "timeout_ms": 45000,
+                "max_prompt_context_chars": 12000
+            },
+            "report": {
+                "save_json": false,
+                "output_directory": "custom_reports"
             }
         })");
 
@@ -162,6 +173,67 @@ TEST(ConfigTest, LoadsValidHttpConfig) {
     EXPECT_EQ(config.llm.base_url, "https://api.openai.com/v1");
     EXPECT_EQ(config.llm.api_key_env, "OPENAI_API_KEY");
     EXPECT_EQ(config.llm.timeout_ms, 45000);
+    EXPECT_EQ(config.llm.max_prompt_context_chars, 12000);
+    EXPECT_FALSE(config.report.save_json);
+    EXPECT_EQ(config.report.output_directory, "custom_reports");
+}
+
+// 验证被 Git 忽略的本地配置可直接提供鉴权值，用户无需再设置 shell 环境变量。
+// fixture 只使用假值，防止真实密钥进入仓库或测试输出。
+TEST(ConfigTest, LoadsDirectLocalCredentialFields) {
+    const std::string config_path =
+        writeConfigFile(std::filesystem::temp_directory_path() / "direct_credentials_test.json",
+                        R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 1
+            },
+            "llm": {
+                "provider": "http",
+                "model": "test-model",
+                "base_url": "https://example.com/v1",
+                "api_key": "fake-llm-key"
+            },
+            "realtime": {
+                "provider": "volc",
+                "connection": {
+                    "app_id": "fake-app-id",
+                    "access_key": "fake-access-key"
+                },
+                "dialog": {
+                    "input_mod": "keep_alive"
+                }
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.llm.api_key, "fake-llm-key");
+    EXPECT_EQ(config.realtime.connection.app_id, "fake-app-id");
+    EXPECT_EQ(config.realtime.connection.access_key, "fake-access-key");
+}
+
+// 验证 LLM prompt 上下文长度必须为正数，避免超长简历保护逻辑退化成 0 或负数的歧义行为。
+TEST(ConfigTest, ThrowsWhenLlmPromptContextLimitIsNotPositive) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_prompt_context_limit_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "http",
+                "model": "gpt-4o-mini",
+                "base_url": "https://api.openai.com/v1",
+                "api_key_env": "OPENAI_API_KEY",
+                "max_prompt_context_chars": 0
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
 // 验证 realtime mock 配置可以显式写入，后续 demo 入口能通过统一配置选择离线事件脚本。
@@ -223,6 +295,11 @@ TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
                     "audio_format": "pcm_s16le",
                     "sample_rate_hz": 16000,
                     "channels": 2
+                },
+                "audio": {
+                    "capture_sample_rate_hz": 48000,
+                    "capture_channels": 2,
+                    "frames_per_buffer": 960
                 }
             }
         })");
@@ -239,6 +316,34 @@ TEST(ConfigTest, LoadsValidVolcRealtimeConfig) {
     EXPECT_EQ(config.realtime.tts.speaker, "demo-speaker");
     EXPECT_EQ(config.realtime.tts.sample_rate_hz, 16000);
     EXPECT_EQ(config.realtime.tts.channels, 2);
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 48000);
+    EXPECT_EQ(config.realtime.audio.capture_channels, 2);
+    EXPECT_EQ(config.realtime.audio.frames_per_buffer, 960);
+}
+
+// 验证本地采集格式必须为正数。虽然本阶段尚未打开真实音频模式，错误配置也应在启动时被拒绝。
+TEST(ConfigTest, ThrowsWhenRealtimeAudioFramesPerBufferIsNotPositive) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_audio_buffer_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "mock",
+                "audio": {
+                    "frames_per_buffer": 0
+                }
+            }
+        })");
+
+    EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
 // 验证真实 realtime provider 必须使用 WSS，避免把鉴权信息放到明文 WebSocket 里。
@@ -266,8 +371,8 @@ TEST(ConfigTest, ThrowsWhenVolcRealtimeEndpointIsNotSecure) {
     EXPECT_THROW(interview::common::loadConfigFromFile(config_path), std::runtime_error);
 }
 
-// 验证当前阶段不会误开 audio 模式；音频输入要等 PortAudio 边界完成后再接。
-TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
+// 验证 keep_alive 模式可以加载，入口层才能据此选择真实音频主链路。
+TEST(ConfigTest, LoadsVolcRealtimeAudioMode) {
     const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
                                                         "invalid_volc_audio_mode_test.json",
                                                     R"({
@@ -283,7 +388,38 @@ TEST(ConfigTest, ThrowsWhenRealtimeInputModeIsAudioBeforeAudioModuleExists) {
             "realtime": {
                 "provider": "volc",
                 "dialog": {
-                    "input_mod": "audio"
+                    "input_mod": "keep_alive"
+                }
+            }
+        })");
+
+    const interview::common::AppConfig config = interview::common::loadConfigFromFile(config_path);
+
+    EXPECT_EQ(config.realtime.dialog.input_mod, "keep_alive");
+    EXPECT_EQ(config.realtime.audio.capture_sample_rate_hz, 16000);
+}
+
+// 验证 keep_alive 模式不接受未知 TTS 格式。当前播放器只实现 pcm_s16le。
+TEST(ConfigTest, ThrowsWhenAudioModeUsesUnsupportedTtsFormat) {
+    const std::string config_path = writeConfigFile(std::filesystem::temp_directory_path() /
+                                                        "invalid_audio_tts_format_config_test.json",
+                                                    R"({
+            "interview": {
+                "candidate_name": "Demo Candidate",
+                "target_role": "C++ Intern",
+                "question_count": 3
+            },
+            "llm": {
+                "provider": "mock",
+                "model": "mock-interviewer"
+            },
+            "realtime": {
+                "provider": "volc",
+                "dialog": {
+                    "input_mod": "keep_alive"
+                },
+                "tts": {
+                    "audio_format": "mp3"
                 }
             }
         })");

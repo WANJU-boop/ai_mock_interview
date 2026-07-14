@@ -3,6 +3,7 @@
 #include "services/pdf/mock/mock_pdf_parser.h"
 #include "session/interview_setup.h"
 
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
@@ -154,4 +155,31 @@ TEST(CliInterviewAppTest, ProcessesMultipleQuestionsAndPrintsAccurateSummary) {
     EXPECT_NE(rendered_output.find("\"question_count\": 2"), std::string::npos);
     EXPECT_NE(rendered_output.find("[状态] 面试官思考中 -> 等待中"), std::string::npos);
     EXPECT_NE(rendered_output.find("[状态] 面试官思考中 -> 会话收尾中"), std::string::npos);
+}
+
+// 验证 CLI 完成后会把同一份结构化报告实际导出到配置目录，而不是只在终端打印 JSON。
+TEST(CliInterviewAppTest, SavesReportWhenOutputDirectoryIsConfigured) {
+    interview::services::MockLlmClient llm_client;
+    const interview::common::AppConfig config = makeTestConfig(1);
+    interview::session::PreparedInterview prepared_interview =
+        prepareTestInterview(config, llm_client);
+    std::istringstream input(
+        "我做过一个 C++ "
+        "日志项目，练习所有权、调试、测试和设计取舍，并能结合具体重构例子说明设计原因。\n");
+    std::ostringstream output;
+    const std::filesystem::path report_directory =
+        std::filesystem::temp_directory_path() / "ai_mock_interview_cli_report_test";
+
+    const int exit_code = interview::app::runCliInterview(input, output, prepared_interview,
+                                                          report_directory.string());
+    const std::string rendered_output = output.str();
+    const std::string prefix = "报告已保存到：";
+    const std::size_t path_start = rendered_output.find(prefix);
+
+    ASSERT_EQ(exit_code, 0);
+    ASSERT_NE(path_start, std::string::npos);
+    const std::size_t path_end = rendered_output.find('\n', path_start);
+    const std::string saved_path =
+        rendered_output.substr(path_start + prefix.size(), path_end - path_start - prefix.size());
+    EXPECT_TRUE(std::filesystem::exists(saved_path));
 }

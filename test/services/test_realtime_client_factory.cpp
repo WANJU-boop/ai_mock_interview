@@ -119,6 +119,9 @@ TEST(RealtimeClientFactoryTest, ResolvesCompleteVolcRuntimeConfig) {
     config.tts.audio_format = "pcm_s16le";
     config.tts.sample_rate_hz = 16000;
     config.tts.channels = 2;
+    config.audio.capture_sample_rate_hz = 48000;
+    config.audio.capture_channels = 2;
+    config.audio.frames_per_buffer = 960;
     const ScopedEnv app_id(config.connection.app_id_env, "fake-app-id");
     const ScopedEnv access_key(config.connection.access_key_env, "fake-access-key");
 
@@ -138,9 +141,29 @@ TEST(RealtimeClientFactoryTest, ResolvesCompleteVolcRuntimeConfig) {
     EXPECT_EQ(runtime.tts_audio_format, "pcm_s16le");
     EXPECT_EQ(runtime.tts_sample_rate_hz, 16000);
     EXPECT_EQ(runtime.tts_channels, 2);
+    EXPECT_EQ(runtime.capture_sample_rate_hz, 48000);
+    EXPECT_EQ(runtime.capture_channels, 2);
+    EXPECT_EQ(runtime.frames_per_buffer, 960);
     EXPECT_EQ(runtime.timeout_ms, 45000);
     EXPECT_EQ(runtime.connect_id.rfind("connect-", 0), 0u);
     EXPECT_EQ(runtime.session_id.rfind("session-", 0), 0u);
+}
+
+// 验证 config.local.json 直写的 App ID/Access Key 可以独立解析，不依赖 shell 环境。
+// 运行时对象只保存内存副本，生成的 connect/session ID 仍与静态配置分离。
+TEST(RealtimeClientFactoryTest, ResolvesDirectLocalVolcCredentials) {
+    interview::common::RealtimeConfig config;
+    config.provider = "volc";
+    config.connection.app_id = "fake-direct-app-id";
+    config.connection.access_key = "fake-direct-access-key";
+    config.connection.app_id_env.clear();
+    config.connection.access_key_env.clear();
+
+    const interview::services::VolcRealtimeRuntimeConfig runtime =
+        interview::services::resolveVolcRealtimeRuntimeConfig(config);
+
+    EXPECT_EQ(runtime.app_id, "fake-direct-app-id");
+    EXPECT_EQ(runtime.access_key, "fake-direct-access-key");
 }
 
 // 验证 mock 配置不能误走火山运行时解析，避免手动 demo 忽略 provider 后意外联网。
