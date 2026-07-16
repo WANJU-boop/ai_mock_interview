@@ -10,7 +10,8 @@
     "boost-asio",
     "boost-beast",
     "portaudio",
-    "podofo"
+    "podofo",
+    "qtbase"
   ],
   "overrides": [
     {

@@ -245,8 +245,9 @@ std::string findDefaultConfigPath(const std::string& executable_path) {
         return kDefaultConfigFileName;
     }
 
-    // 从可执行文件所在目录向上回退几层，兼容 `build/AI_mock_interview` 这类从项目外直接启动的场景。
-    for (int depth = 0; depth < 4 && !executable_directory.empty(); ++depth) {
+    // 从可执行文件所在目录向上回退几层，同时兼容普通 build 可执行文件和
+    // `build/AI_mock_interview_qt.app/Contents/MacOS` 里的 macOS bundle 入口。
+    for (int depth = 0; depth < 6 && !executable_directory.empty(); ++depth) {
         const std::filesystem::path candidate = executable_directory / kDefaultConfigFileName;
         if (isExistingFile(candidate)) {
             return candidate.lexically_normal().string();

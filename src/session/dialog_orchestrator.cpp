@@ -24,18 +24,35 @@ struct PendingQuestionAnswer {
     bool waiting_for_follow_up = false;
 };
 
-// 状态切换集中在一个入口，后续接 Qt signal 或状态日志时只需要扩展这里。
-void transitionState(DialogSession& session, InterviewState next_state) {
+// 可选 hook 统一携带展示通知和取消请求，避免业务 helper 依赖 Qt 或全局状态。
+struct DialogRuntimeHooks {
+    IDialogObserver* observer = nullptr;
+    const DialogCancellationToken* cancellation_token = nullptr;
+};
+
+const char kCancellationMessage[] = "面试已取消。";
+
+bool isStopRequested(const DialogRuntimeHooks& hooks) {
+    return hooks.cancellation_token != nullptr && hooks.cancellation_token->IsStopRequested();
+}
+
+// 状态切换集中在一个入口，保证 DialogSession 和 UI 观察到相同顺序。
+void transitionState(DialogSession& session, InterviewState next_state,
+                     const DialogRuntimeHooks& hooks) {
     session.setState(next_state);
+    if (hooks.observer != nullptr) {
+        hooks.observer->OnStateChanged(next_state);
+    }
 }
 
 // 所有错误路径执行同一组动作：保存可展示错误、进入终态并关闭外部资源。
 // close() 由接口约定为可重复调用，因此上层清理不必判断失败发生在哪个阶段。
 void failSession(DialogOrchestratorResult& result, services::IRealtimeClient& realtime_client,
-                 RealtimeAudioBridge* audio_bridge, const std::string& error_message) {
+                 RealtimeAudioBridge* audio_bridge, const DialogRuntimeHooks& hooks,
+                 const std::string& error_message) {
     result.success = false;
     result.error_message = error_message;
-    transitionState(result.session, InterviewState::kError);
+    transitionState(result.session, InterviewState::kError, hooks);
     if (audio_bridge != nullptr) {
         // 先停止 PortAudio callback，再关闭 WSS；这样 callback 不会继续累积无法发送的 PCM。
         audio_bridge->stop();
@@ -47,17 +64,21 @@ void failSession(DialogOrchestratorResult& result, services::IRealtimeClient& re
 // 这样结果对象表示“实际发出的文本”，而不是“尝试发送的文本”。
 bool sendInterviewerText(DialogOrchestratorResult& result,
                          services::IRealtimeClient& realtime_client,
-                         RealtimeAudioBridge* audio_bridge, const std::string& text) {
+                         RealtimeAudioBridge* audio_bridge, const DialogRuntimeHooks& hooks,
+                         const std::string& text) {
     if (audio_bridge != nullptr) {
         audio_bridge->suspendCaptureForwarding();
     }
     if (!realtime_client.sendInterviewerText(text)) {
-        failSession(result, realtime_client, audio_bridge,
+        failSession(result, realtime_client, audio_bridge, hooks,
                     "发送面试官文本失败，realtime 会话可能已经关闭。");
         return false;
     }
 
     result.interviewer_messages.push_back(text);
+    if (hooks.observer != nullptr) {
+        hooks.observer->OnInterviewerText(text);
+    }
     return true;
 }
 
@@ -65,33 +86,34 @@ bool sendInterviewerText(DialogOrchestratorResult& result,
 bool askCurrentQuestion(DialogOrchestratorResult& result,
                         services::IRealtimeClient& realtime_client, InterviewManager& manager,
                         RealtimeAudioBridge* audio_bridge, std::size_t question_number,
-                        PendingQuestionAnswer& pending_record, const std::string& opening_text) {
+                        PendingQuestionAnswer& pending_record, const std::string& opening_text,
+                        const DialogRuntimeHooks& hooks) {
     const std::string* current_question = manager.getCurrentQuestion();
     if (current_question == nullptr) {
-        failSession(result, realtime_client, audio_bridge, "没有可提问的当前题目。");
+        failSession(result, realtime_client, audio_bridge, hooks, "没有可提问的当前题目。");
         return false;
     }
 
     pending_record = PendingQuestionAnswer{};
     pending_record.record.question = *current_question;
 
-    transitionState(result.session, InterviewState::kInterviewerSpeaking);
+    transitionState(result.session, InterviewState::kInterviewerSpeaking, hooks);
     const std::string question_text = opening_text + "问题 " + std::to_string(question_number) +
                                       "/" + std::to_string(manager.getQuestionCount()) + "：" +
                                       *current_question + " 我说完后，请开始回答。";
-    if (!sendInterviewerText(result, realtime_client, audio_bridge, question_text)) {
+    if (!sendInterviewerText(result, realtime_client, audio_bridge, hooks, question_text)) {
         return false;
     }
 
     // 提问后马上进入候选人回答态，等待后续 transcript_final 事件。
-    transitionState(result.session, InterviewState::kCandidateSpeaking);
+    transitionState(result.session, InterviewState::kCandidateSpeaking, hooks);
     return true;
 }
 
 // 正常结束也先发送结束语，再进入 kCompleted；发送失败仍应落入统一错误收口。
 void completeSession(DialogOrchestratorResult& result, services::IRealtimeClient& realtime_client,
-                     RealtimeAudioBridge* audio_bridge) {
-    transitionState(result.session, InterviewState::kCompleted);
+                     RealtimeAudioBridge* audio_bridge, const DialogRuntimeHooks& hooks) {
+    transitionState(result.session, InterviewState::kCompleted, hooks);
     result.success = true;
     if (audio_bridge != nullptr) {
         audio_bridge->stop();
@@ -100,16 +122,16 @@ void completeSession(DialogOrchestratorResult& result, services::IRealtimeClient
 }
 
 bool finishSession(DialogOrchestratorResult& result, services::IRealtimeClient& realtime_client,
-                   RealtimeAudioBridge* audio_bridge) {
-    transitionState(result.session, InterviewState::kSessionEnding);
-    if (!sendInterviewerText(result, realtime_client, audio_bridge,
+                   RealtimeAudioBridge* audio_bridge, const DialogRuntimeHooks& hooks) {
+    transitionState(result.session, InterviewState::kSessionEnding, hooks);
+    if (!sendInterviewerText(result, realtime_client, audio_bridge, hooks,
                              "本次模拟面试结束，正在生成报告。")) {
         return false;
     }
 
     if (audio_bridge == nullptr) {
         // mock/text 模式没有本地播放队列，发送成功即可完成。
-        completeSession(result, realtime_client, audio_bridge);
+        completeSession(result, realtime_client, audio_bridge, hooks);
     }
     return true;
 }
@@ -117,11 +139,21 @@ bool finishSession(DialogOrchestratorResult& result, services::IRealtimeClient& 
 std::optional<services::LlmScoreResult>
 scoreAnswerKeepingAudioAlive(InterviewManager& manager, services::IRealtimeClient& realtime_client,
                              RealtimeAudioBridge* audio_bridge, const std::string& answer,
-                             std::string& error_message) {
+                             std::string& error_message, const DialogRuntimeHooks& hooks) {
+    if (isStopRequested(hooks)) {
+        error_message = kCancellationMessage;
+        return std::nullopt;
+    }
+
     if (audio_bridge == nullptr) {
         // 离线 mock 不需要额外线程，保持单元测试的确定性。
         try {
-            return manager.scoreCandidateAnswer(answer);
+            const services::LlmScoreResult score_result = manager.scoreCandidateAnswer(answer);
+            if (isStopRequested(hooks)) {
+                error_message = kCancellationMessage;
+                return std::nullopt;
+            }
+            return score_result;
         } catch (const std::exception& error) {
             error_message = "LLM 评分失败：" + std::string(error.what());
             return std::nullopt;
@@ -134,7 +166,12 @@ scoreAnswerKeepingAudioAlive(InterviewManager& manager, services::IRealtimeClien
     std::future<services::LlmScoreResult> score_future = std::async(
         std::launch::async, [&manager, answer]() { return manager.scoreCandidateAnswer(answer); });
 
+    bool cancellation_requested = false;
+
     while (score_future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+        // std::future 析构可能等待阻塞 HTTP 完成。取消后继续保活到 future 可回收，
+        // 再由 worker 丢弃评分并统一关闭资源，避免后台任务引用已销毁的 manager。
+        cancellation_requested = cancellation_requested || isStopRequested(hooks);
         if (!audio_bridge->pumpCapturedAudio()) {
             error_message = "LLM 评分期间发送音频保活失败。";
             return std::nullopt;
@@ -157,7 +194,12 @@ scoreAnswerKeepingAudioAlive(InterviewManager& manager, services::IRealtimeClien
     }
 
     try {
-        return score_future.get();
+        const services::LlmScoreResult score_result = score_future.get();
+        if (cancellation_requested || isStopRequested(hooks)) {
+            error_message = kCancellationMessage;
+            return std::nullopt;
+        }
+        return score_result;
     } catch (const std::exception& error) {
         error_message = "LLM 评分失败：" + std::string(error.what());
         return std::nullopt;
@@ -168,16 +210,16 @@ scoreAnswerKeepingAudioAlive(InterviewManager& manager, services::IRealtimeClien
 bool moveToNextQuestionOrFinish(DialogOrchestratorResult& result,
                                 services::IRealtimeClient& realtime_client,
                                 InterviewManager& manager, RealtimeAudioBridge* audio_bridge,
-                                std::size_t& question_number,
-                                PendingQuestionAnswer& pending_record) {
+                                std::size_t& question_number, PendingQuestionAnswer& pending_record,
+                                const DialogRuntimeHooks& hooks) {
     if (!manager.moveToNextQuestion()) {
-        return finishSession(result, realtime_client, audio_bridge);
+        return finishSession(result, realtime_client, audio_bridge, hooks);
     }
 
     ++question_number;
-    transitionState(result.session, InterviewState::kIdle);
+    transitionState(result.session, InterviewState::kIdle, hooks);
     return askCurrentQuestion(result, realtime_client, manager, audio_bridge, question_number,
-                              pending_record, "");
+                              pending_record, "", hooks);
 }
 
 // 主回答先写入回答历史并完成首次评分；若触发追问，结构化记录暂不落盘，
@@ -185,19 +227,20 @@ bool moveToNextQuestionOrFinish(DialogOrchestratorResult& result,
 bool processPrimaryAnswer(DialogOrchestratorResult& result,
                           services::IRealtimeClient& realtime_client, InterviewManager& manager,
                           RealtimeAudioBridge* audio_bridge, std::size_t& question_number,
-                          PendingQuestionAnswer& pending_record, const std::string& answer) {
-    transitionState(result.session, InterviewState::kInterviewerThinking);
+                          PendingQuestionAnswer& pending_record, const std::string& answer,
+                          const DialogRuntimeHooks& hooks) {
+    transitionState(result.session, InterviewState::kInterviewerThinking, hooks);
     if (!manager.recordCandidateAnswer(result.session, answer)) {
-        failSession(result, realtime_client, audio_bridge, "候选人回答无法被记录。");
+        failSession(result, realtime_client, audio_bridge, hooks, "候选人回答无法被记录。");
         return false;
     }
 
     pending_record.record.candidate_answer = answer;
     std::string score_error;
-    const std::optional<services::LlmScoreResult> score_result =
-        scoreAnswerKeepingAudioAlive(manager, realtime_client, audio_bridge, answer, score_error);
+    const std::optional<services::LlmScoreResult> score_result = scoreAnswerKeepingAudioAlive(
+        manager, realtime_client, audio_bridge, answer, score_error, hooks);
     if (!score_result.has_value()) {
-        failSession(result, realtime_client, audio_bridge, score_error);
+        failSession(result, realtime_client, audio_bridge, hooks, score_error);
         return false;
     }
     const FollowUpDecision follow_up = manager.decideFollowUp(*score_result);
@@ -206,12 +249,12 @@ bool processPrimaryAnswer(DialogOrchestratorResult& result,
         pending_record.record.has_follow_up = true;
         pending_record.record.follow_up_prompt = follow_up.prompt;
 
-        transitionState(result.session, InterviewState::kInterviewerSpeaking);
-        if (!sendInterviewerText(result, realtime_client, audio_bridge, follow_up.prompt)) {
+        transitionState(result.session, InterviewState::kInterviewerSpeaking, hooks);
+        if (!sendInterviewerText(result, realtime_client, audio_bridge, hooks, follow_up.prompt)) {
             return false;
         }
 
-        transitionState(result.session, InterviewState::kCandidateSpeaking);
+        transitionState(result.session, InterviewState::kCandidateSpeaking, hooks);
         return true;
     }
 
@@ -219,7 +262,7 @@ bool processPrimaryAnswer(DialogOrchestratorResult& result,
     result.session.addScoreResult(score_result->score, score_result->feedback);
     result.session.addQuestionAnswerRecord(pending_record.record);
     return moveToNextQuestionOrFinish(result, realtime_client, manager, audio_bridge,
-                                      question_number, pending_record);
+                                      question_number, pending_record, hooks);
 }
 
 // 追问评分使用“主回答 + 追问回答”的组合上下文，最终只追加一条题目记录，
@@ -228,16 +271,16 @@ bool processFollowUpAnswer(DialogOrchestratorResult& result,
                            services::IRealtimeClient& realtime_client, InterviewManager& manager,
                            RealtimeAudioBridge* audio_bridge, std::size_t& question_number,
                            PendingQuestionAnswer& pending_record,
-                           const std::string& follow_up_answer) {
-    transitionState(result.session, InterviewState::kInterviewerThinking);
+                           const std::string& follow_up_answer, const DialogRuntimeHooks& hooks) {
+    transitionState(result.session, InterviewState::kInterviewerThinking, hooks);
     pending_record.record.follow_up_answer = follow_up_answer;
     const std::string combined_answer =
         pending_record.record.candidate_answer + " " + follow_up_answer;
     std::string score_error;
     const std::optional<services::LlmScoreResult> final_score = scoreAnswerKeepingAudioAlive(
-        manager, realtime_client, audio_bridge, combined_answer, score_error);
+        manager, realtime_client, audio_bridge, combined_answer, score_error, hooks);
     if (!final_score.has_value()) {
-        failSession(result, realtime_client, audio_bridge, score_error);
+        failSession(result, realtime_client, audio_bridge, hooks, score_error);
         return false;
     }
 
@@ -246,36 +289,43 @@ bool processFollowUpAnswer(DialogOrchestratorResult& result,
     result.session.addQuestionAnswerRecord(pending_record.record);
 
     return moveToNextQuestionOrFinish(result, realtime_client, manager, audio_bridge,
-                                      question_number, pending_record);
+                                      question_number, pending_record, hooks);
 }
 
 } // namespace
 
 DialogOrchestrator::DialogOrchestrator(PreparedInterview& prepared_interview,
                                        services::IRealtimeClient& realtime_client,
-                                       RealtimeAudioBridge* audio_bridge)
+                                       RealtimeAudioBridge* audio_bridge, IDialogObserver* observer,
+                                       const DialogCancellationToken* cancellation_token)
     : prepared_interview_(prepared_interview), realtime_client_(realtime_client),
-      audio_bridge_(audio_bridge) {}
+      audio_bridge_(audio_bridge), observer_(observer), cancellation_token_(cancellation_token) {}
 
 DialogOrchestratorResult DialogOrchestrator::run() {
     DialogOrchestratorResult result;
+    const DialogRuntimeHooks hooks{observer_, cancellation_token_};
+    if (isStopRequested(hooks)) {
+        failSession(result, realtime_client_, audio_bridge_, hooks, kCancellationMessage);
+        return result;
+    }
     if (!prepared_interview_.isReady()) {
         // 准备阶段失败时不尝试连接外部服务，直接复用已经收口好的错误信息。
-        failSession(result, realtime_client_, audio_bridge_, prepared_interview_.getErrorMessage());
+        failSession(result, realtime_client_, audio_bridge_, hooks,
+                    prepared_interview_.getErrorMessage());
         return result;
     }
 
     if (!realtime_client_.connect()) {
         // connect 返回 false 表示客户端没有建立可用事件流，后续不能继续读取或发送。
         const std::string detail = realtime_client_.getLastErrorMessage();
-        failSession(result, realtime_client_, audio_bridge_,
+        failSession(result, realtime_client_, audio_bridge_, hooks,
                     detail.empty() ? "realtime 会话连接失败。"
                                    : "realtime 会话连接失败：" + detail);
         return result;
     }
 
     if (audio_bridge_ != nullptr && !audio_bridge_->start()) {
-        failSession(result, realtime_client_, audio_bridge_, "本地音频设备无法启动。");
+        failSession(result, realtime_client_, audio_bridge_, hooks, "本地音频设备无法启动。");
         return result;
     }
 
@@ -289,15 +339,19 @@ DialogOrchestratorResult DialogOrchestrator::run() {
     // 只有一个所有者；PortAudio callback 只通过无锁队列提供已采集 PCM。
     // 后续接 Qt 时，不应在 UI 线程直接调用 run()，而应把整个 run() 放到一个 joinable worker。
     while (realtime_client_.hasNextEvent()) {
+        if (isStopRequested(hooks)) {
+            failSession(result, realtime_client_, audio_bridge_, hooks, kCancellationMessage);
+            return result;
+        }
         if (audio_bridge_ != nullptr && !audio_bridge_->pumpCapturedAudio()) {
-            failSession(result, realtime_client_, audio_bridge_, "候选人音频发送失败。");
+            failSession(result, realtime_client_, audio_bridge_, hooks, "候选人音频发送失败。");
             return result;
         }
         if (audio_bridge_ != nullptr &&
             result.session.getState() == InterviewState::kSessionEnding &&
             audio_bridge_->isInterviewerPlaybackComplete()) {
             // 结束语的服务端音频和本地播放队列都已清空，现在关闭不会截断尾音。
-            completeSession(result, realtime_client_, audio_bridge_);
+            completeSession(result, realtime_client_, audio_bridge_, hooks);
             return result;
         }
         const std::optional<common::RealtimeEvent> next_event =
@@ -310,7 +364,8 @@ DialogOrchestratorResult DialogOrchestrator::run() {
 
         const common::RealtimeEvent& event = *next_event;
         if (audio_bridge_ != nullptr && !audio_bridge_->consumeRealtimeEvent(event)) {
-            failSession(result, realtime_client_, audio_bridge_, "面试官 TTS 音频播放失败。");
+            failSession(result, realtime_client_, audio_bridge_, hooks,
+                        "面试官 TTS 音频播放失败。");
             return result;
         }
         switch (event.type) {
@@ -326,9 +381,9 @@ DialogOrchestratorResult DialogOrchestrator::run() {
             const std::string opening_text = "欢迎你，" + prepared_interview_.getCandidateName() +
                                              "。本次模拟面试岗位是 " +
                                              prepared_interview_.getTargetRole() + "。";
-            transitionState(result.session, InterviewState::kIdle);
+            transitionState(result.session, InterviewState::kIdle, hooks);
             if (!askCurrentQuestion(result, realtime_client_, manager, audio_bridge_,
-                                    question_number, pending_record, opening_text)) {
+                                    question_number, pending_record, opening_text, hooks)) {
                 return result;
             }
             break;
@@ -336,29 +391,36 @@ DialogOrchestratorResult DialogOrchestrator::run() {
 
         case common::RealtimeEventType::kTranscriptPartial:
             if (!interview_started) {
-                failSession(result, realtime_client_, audio_bridge_,
+                failSession(result, realtime_client_, audio_bridge_, hooks,
                             "收到 partial transcript 前尚未开始面试。");
                 return result;
             }
             // partial transcript 只用于未来 UI 实时展示，不推进评分和题目状态。
             result.partial_transcripts.push_back(event.text);
-            transitionState(result.session, InterviewState::kCandidateSpeaking);
+            if (hooks.observer != nullptr) {
+                hooks.observer->OnCandidateTranscript(event.text, false);
+            }
+            transitionState(result.session, InterviewState::kCandidateSpeaking, hooks);
             break;
 
         case common::RealtimeEventType::kTranscriptFinal:
             if (!interview_started) {
-                failSession(result, realtime_client_, audio_bridge_,
+                failSession(result, realtime_client_, audio_bridge_, hooks,
                             "收到 final transcript 前尚未开始面试。");
                 return result;
             }
 
+            if (hooks.observer != nullptr) {
+                hooks.observer->OnCandidateTranscript(event.text, true);
+            }
+
             if (pending_record.waiting_for_follow_up) {
                 if (!processFollowUpAnswer(result, realtime_client_, manager, audio_bridge_,
-                                           question_number, pending_record, event.text)) {
+                                           question_number, pending_record, event.text, hooks)) {
                     return result;
                 }
             } else if (!processPrimaryAnswer(result, realtime_client_, manager, audio_bridge_,
-                                             question_number, pending_record, event.text)) {
+                                             question_number, pending_record, event.text, hooks)) {
                 return result;
             }
 
@@ -377,20 +439,21 @@ DialogOrchestratorResult DialogOrchestrator::run() {
             break;
 
         case common::RealtimeEventType::kError:
-            failSession(result, realtime_client_, audio_bridge_,
+            failSession(result, realtime_client_, audio_bridge_, hooks,
                         event.error_message.empty() ? "realtime 服务返回未知错误。"
                                                     : event.error_message);
             return result;
 
         case common::RealtimeEventType::kClosed:
-            failSession(result, realtime_client_, audio_bridge_, "realtime 连接在面试完成前关闭。");
+            failSession(result, realtime_client_, audio_bridge_, hooks,
+                        "realtime 连接在面试完成前关闭。");
             return result;
         }
     }
 
     if (!result.session.isFinished()) {
         // hasNextEvent() 变为 false 但尚未完成，说明脚本过短或真实连接提前耗尽。
-        failSession(result, realtime_client_, audio_bridge_,
+        failSession(result, realtime_client_, audio_bridge_, hooks,
                     "realtime 事件流结束，但面试尚未完成。");
     }
 

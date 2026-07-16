@@ -1,6 +1,8 @@
 #pragma once
 
 #include "services/realtime/realtime_client.h"
+#include "session/dialog_cancellation.h"
+#include "session/dialog_observer.h"
 #include "session/dialog_session.h"
 #include "session/interview_setup.h"
 #include "session/realtime_audio_bridge.h"
@@ -30,10 +32,13 @@ struct DialogOrchestratorResult {
 // 它不负责 WebSocket 细节，也不直接生成题目或评分，只协调 IRealtimeClient 和 InterviewManager。
 class DialogOrchestrator final {
   public:
-    // 两个依赖都由外部拥有，且必须比 orchestrator 和同步 run() 活得更久。
+    // 所有依赖都由外部拥有，且必须比 orchestrator 和同步 run() 活得更久。
+    // observer/cancellation_token 为空时保持原 CLI 和测试行为；Qt worker 会显式注入两者。
     DialogOrchestrator(PreparedInterview& prepared_interview,
                        services::IRealtimeClient& realtime_client,
-                       RealtimeAudioBridge* audio_bridge = nullptr);
+                       RealtimeAudioBridge* audio_bridge = nullptr,
+                       IDialogObserver* observer = nullptr,
+                       const DialogCancellationToken* cancellation_token = nullptr);
 
     // 运行一次确定性的 realtime 面试；当前实现是同步事件循环，方便先用 mock 测试闭环。
     DialogOrchestratorResult run();
@@ -45,6 +50,10 @@ class DialogOrchestrator final {
     services::IRealtimeClient& realtime_client_;
     // 空指针保持原有 mock/text 流程不变；audio 模式显式注入 bridge，避免 session 自己创建硬件资源。
     RealtimeAudioBridge* audio_bridge_ = nullptr;
+    // observer 只接收只读业务事件，不拥有 UI，也不把 Qt 类型带进 session 层。
+    IDialogObserver* observer_ = nullptr;
+    // 取消令牌只在安全点读取；连接、音频和 future 的释放仍留在当前 worker。
+    const DialogCancellationToken* cancellation_token_ = nullptr;
 };
 
 } // namespace session

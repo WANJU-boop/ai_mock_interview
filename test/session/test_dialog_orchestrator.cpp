@@ -1,6 +1,8 @@
 #include "services/llm/mock/mock_llm_client.h"
 #include "services/pdf/mock/mock_pdf_parser.h"
 #include "services/realtime/mock/mock_realtime_client.h"
+#include "session/dialog_cancellation.h"
+#include "session/dialog_observer.h"
 #include "session/dialog_orchestrator.h"
 #include "session/interview_setup.h"
 
@@ -9,6 +11,31 @@
 #include <vector>
 
 namespace {
+
+// 测试观察者只记录回调，不接触 Qt；这样可以先固定 session -> UI 的线程外数据契约。
+class RecordingDialogObserver final : public interview::session::IDialogObserver {
+  public:
+    void OnStateChanged(interview::session::InterviewState state) override {
+        states.push_back(state);
+    }
+
+    void OnInterviewerText(const std::string& text) override {
+        interviewer_texts.push_back(text);
+    }
+
+    void OnCandidateTranscript(const std::string& text, bool is_final) override {
+        candidate_transcripts.push_back({text, is_final});
+    }
+
+    struct TranscriptRecord {
+        std::string text;
+        bool is_final = false;
+    };
+
+    std::vector<interview::session::InterviewState> states;
+    std::vector<std::string> interviewer_texts;
+    std::vector<TranscriptRecord> candidate_transcripts;
+};
 
 interview::common::InterviewConfig makeConfig(int question_count) {
     interview::common::InterviewConfig config;
@@ -173,6 +200,55 @@ TEST(DialogOrchestratorTest, FailsWhenEventStreamEndsBeforeCompletion) {
 
     EXPECT_FALSE(result.success);
     EXPECT_EQ(result.error_message, "realtime 事件流结束，但面试尚未完成。");
+    EXPECT_EQ(result.session.getState(), interview::session::InterviewState::kError);
+    EXPECT_TRUE(realtime_client.isClosed());
+}
+
+// 验证 observer 能实时看到状态、面试官文本以及 partial/final transcript，
+// 因为 Qt worker 后续只依赖这些事件更新界面，不会读取编排器内部状态。
+TEST(DialogOrchestratorTest, NotifiesObserverDuringRealtimeFlow) {
+    interview::services::MockLlmClient llm_client;
+    interview::session::PreparedInterview prepared_interview =
+        prepareInterview(makeConfig(1), llm_client);
+    interview::services::MockRealtimeClient realtime_client(
+        {makeEvent(interview::common::RealtimeEventType::kConnected),
+         makeEvent(interview::common::RealtimeEventType::kTranscriptPartial, "正在组织回答"),
+         makeEvent(interview::common::RealtimeEventType::kTranscriptFinal, strongAnswer())});
+    RecordingDialogObserver observer;
+
+    interview::session::DialogOrchestrator orchestrator(prepared_interview, realtime_client,
+                                                        nullptr, &observer);
+    const interview::session::DialogOrchestratorResult result = orchestrator.run();
+
+    ASSERT_TRUE(result.success);
+    ASSERT_FALSE(observer.states.empty());
+    EXPECT_EQ(observer.states.back(), interview::session::InterviewState::kCompleted);
+    ASSERT_EQ(observer.interviewer_texts.size(), 2u);
+    ASSERT_EQ(observer.candidate_transcripts.size(), 2u);
+    EXPECT_EQ(observer.candidate_transcripts[0].text, "正在组织回答");
+    EXPECT_FALSE(observer.candidate_transcripts[0].is_final);
+    EXPECT_EQ(observer.candidate_transcripts[1].text, strongAnswer());
+    EXPECT_TRUE(observer.candidate_transcripts[1].is_final);
+}
+
+// 验证启动前取消不会建立或推进会话，同时仍通过统一错误终态完成资源收口。
+// 这个边界保证用户在 Qt worker 真正运行前快速关闭窗口时不会留下半初始化连接。
+TEST(DialogOrchestratorTest, HonorsCancellationBeforeConnecting) {
+    interview::services::MockLlmClient llm_client;
+    interview::session::PreparedInterview prepared_interview =
+        prepareInterview(makeConfig(1), llm_client);
+    interview::services::MockRealtimeClient realtime_client(
+        {makeEvent(interview::common::RealtimeEventType::kConnected),
+         makeEvent(interview::common::RealtimeEventType::kTranscriptFinal, strongAnswer())});
+    interview::session::DialogCancellationToken cancellation_token;
+    cancellation_token.RequestStop();
+
+    interview::session::DialogOrchestrator orchestrator(prepared_interview, realtime_client,
+                                                        nullptr, nullptr, &cancellation_token);
+    const interview::session::DialogOrchestratorResult result = orchestrator.run();
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error_message, "面试已取消。");
     EXPECT_EQ(result.session.getState(), interview::session::InterviewState::kError);
     EXPECT_TRUE(realtime_client.isClosed());
 }

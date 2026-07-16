@@ -73,6 +73,28 @@ TEST(ConfigTest, FindsDefaultConfigPathNearExecutableDirectory) {
     }
 }
 
+// 验证从 Finder 启动 macOS .app 时，可以越过 Contents/MacOS 层级回到项目目录找到配置。
+// 这个边界让 Qt bundle 无需依赖启动进程碰巧拥有正确的当前工作目录。
+TEST(ConfigTest, FindsDefaultConfigPathOutsideMacOsBundle) {
+    const std::filesystem::path root_directory =
+        std::filesystem::temp_directory_path() / "config_path_bundle_test";
+    const std::filesystem::path executable_directory =
+        root_directory / "build" / "AI_mock_interview_qt.app" / "Contents" / "MacOS";
+    std::filesystem::create_directories(executable_directory);
+    writeConfigFile(
+        root_directory / "config.example.json",
+        R"({"interview":{"candidate_name":"Demo","target_role":"C++","question_count":1},"llm":{"provider":"mock","model":"mock"}})");
+
+    {
+        const ScopedCurrentPath scoped_current_path(std::filesystem::temp_directory_path());
+        const std::string resolved_path = interview::common::findDefaultConfigPath(
+            (executable_directory / "AI_mock_interview_qt").string());
+
+        EXPECT_EQ(resolved_path,
+                  (root_directory / "config.example.json").lexically_normal().string());
+    }
+}
+
 // 验证完全找不到默认配置时，仍保留旧的文件名，方便错误信息继续直观指向缺失文件。
 TEST(ConfigTest, ReturnsDefaultConfigFileNameWhenNoFallbackPathExists) {
     const ScopedCurrentPath scoped_current_path(std::filesystem::temp_directory_path());

@@ -37,3 +37,29 @@ target_link_libraries(Project_test
 
 include(GoogleTest)
 gtest_discover_tests(Project_test)
+
+# Qt UI 测试使用独立 QApplication，避免和 gtest_main 争用 main() 与事件循环。
+add_executable(Qt_ui_test
+    ui/test_qt_interview_ui.cpp
+)
+
+set_target_properties(Qt_ui_test PROPERTIES AUTOMOC ON)
+# 与 Qt 主程序保持相同的 macOS linker 兼容边界，不改变现有纯 C++ 测试目标。
+set_target_properties(Qt_ui_test PROPERTIES QT_NO_DISABLE_WARN_DUPLICATE_LIBRARIES ON)
+
+target_link_libraries(Qt_ui_test
+    PRIVATE
+        Qt6::Test
+        Qt6::Widgets
+        session_lib
+        ui_lib
+)
+
+add_test(NAME QtUiTest COMMAND Qt_ui_test)
+# vcpkg 的 macOS qtbase 只安装 cocoa plugin；测试只构造窗口而不 show，因此不会弹出界面。
+# Linux/其它平台继续使用适合无显示器 CI 的 offscreen plugin。
+if(APPLE)
+    set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+else()
+    set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
