@@ -1,11 +1,13 @@
-#include <gtest/gtest.h>
-
+// clang-format off
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 
+#include <gtest/gtest.h>
+
 #include "common/logger.h"
+// clang-format on
 
 // 验证初始化后能拿到全局 logger，并且对应日志文件已经创建出来。
 TEST(LoggerTest, InitCreatesLogger) {
@@ -37,4 +39,17 @@ TEST(LoggerTest, WriteMessageToFile) {
     const std::string content = buffer.str();
 
     EXPECT_NE(content.find(message), std::string::npos);
+}
+
+// 验证冷启动时文件 sink 创建失败仍获得控制台 logger；目录不能作为日志文件，
+// 因此这个边界不依赖当前用户权限，也不需要修改工作目录或模拟真实桌面。
+TEST(LoggerTest, FallsBackToConsoleWhenLogFileCannotBeOpened) {
+    auto& logger = interview::common::Logger::GetLogger();
+    logger.reset();
+    interview::common::Logger::Init(".", false);
+
+    // 直接检查同一个共享指针，避免再次 GetLogger 的懒初始化掩盖冷启动失败。
+    ASSERT_NE(logger, nullptr);
+    EXPECT_EQ(logger->sinks().size(), 1U);
+    EXPECT_NO_THROW(LOG_INFO("日志目录不可写时，面试仍可继续。"));
 }

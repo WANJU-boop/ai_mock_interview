@@ -56,8 +56,8 @@ target_link_libraries(Qt_ui_test
 )
 
 add_test(NAME QtUiTest COMMAND Qt_ui_test)
-# vcpkg 的 macOS qtbase 只安装 cocoa plugin；测试只构造窗口而不 show，因此不会弹出界面。
-# Linux/其它平台继续使用适合无显示器 CI 的 offscreen plugin。
+# vcpkg 的 macOS qtbase 只安装 cocoa plugin；报告预览测试会短暂打开窗口，需要图形会话。
+# Linux/其它平台使用适合无显示器 CI 的 offscreen plugin，不依赖真实显示器。
 if(APPLE)
     set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
 else()

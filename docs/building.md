@@ -95,7 +95,8 @@ Click **开始面试** (Start interview). The default Qt Mock mode automatically
 three scripted candidate answers, scores them, and writes a JSON report under
 `reports/`. This is a deterministic demonstration, not online AI or live speech
 recognition. Neither a microphone nor an API key is needed. The UI is currently
-in Chinese.
+in Chinese. Click **查看报告** (View report) to read the answers, scores and feedback
+inside the app, or **打开目录** (Open folder) to locate the JSON file.
 
 ### CLI: type your own answers
 
