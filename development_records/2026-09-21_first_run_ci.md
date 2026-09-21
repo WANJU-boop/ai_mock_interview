@@ -25,8 +25,18 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
 - 文档命令与 CI 使用相同的依赖 baseline 和默认 Mock 配置。
 - 第一次云端运行在 spdlog 版本解析阶段失败：vcpkg 的浅克隆不包含 override 引用的
   历史 port tree。已改为完整获取 vcpkg 历史，保留原有版本约束。
+- 第二次云端运行进入 Qt 配置后失败，日志明确显示 `X11_SM_FOUND` 为空。
+  已在 CI 和安装文档补充 `libsm-dev`，它同时安装依赖的 `libice-dev`。
+- CI 在配置成功后立即保存完整依赖缓存；配置失败则用独立 key 保存部分缓存，
+  避免不可覆盖的部分缓存占用完整缓存 key，也避免每次重新编译之前成功的库。
+- 公开仓库的 Ubuntu runner 提供 4 核、16 GB 内存，依赖并发从 2 调整到 4；
+  本地文档仍建议初学者以 2 个项目编译任务起步。
 
 ## 下一步
 
-核实云端 Linux 首次构建结果，补 Qt 报告展示和真实软件截图。
-真实服务可用性单独验证，不影响无密钥演示。
+核实修复 Linux 平台依赖后的云端构建结果。Qt 报告展示、真实截图和文本接口验证
+已完成，详见同日的项目展示记录；真实服务可用性不影响无密钥演示。
+
+参考：[Ubuntu libsm-dev](https://packages.ubuntu.com/noble/libsm-dev)、
+[GitHub 独立缓存保存](https://github.com/actions/cache/tree/v4/save)、
+[GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。

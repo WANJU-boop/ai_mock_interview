@@ -22,7 +22,8 @@ jobs:
     env:
       VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
-      VCPKG_MAX_CONCURRENCY: '2'
+      # 公开仓库的标准 Ubuntu runner 提供 4 核、16 GB 内存。
+      VCPKG_MAX_CONCURRENCY: '4'
 
     steps:
       - name: Checkout
@@ -36,7 +37,7 @@ jobs:
             pkg-config autoconf autoconf-archive automake libtool bison flex gperf \
             python3 python3-jinja2 libltdl-dev libasound2-dev libjack-jackd2-dev \
             '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev
+            libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev libsm-dev
 
       - name: Read pinned dependency baseline
         id: baseline
@@ -53,11 +54,14 @@ jobs:
 
       # 缓存只加速依赖编译；每次仍从源码重新构建项目并运行测试。
       - name: Restore compiled dependencies
-        uses: actions/cache@v4
+        id: dependencies
+        uses: actions/cache/restore@v4
         with:
           path: .vcpkg-cache
           key: ubuntu-24.04-x64-vcpkg-${{ hashFiles('vcpkg.json', '.github/workflows/ci.yml') }}
-          restore-keys: ubuntu-24.04-x64-vcpkg-
+          restore-keys: |
+            ubuntu-24.04-x64-vcpkg-${{ hashFiles('vcpkg.json', '.github/workflows/ci.yml') }}-
+            ubuntu-24.04-x64-vcpkg-
 
       - name: Bootstrap vcpkg
         run: |
@@ -65,10 +69,19 @@ jobs:
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Configure
+        id: configure
         run: >-
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_TARGET_TRIPLET=x64-linux
+
+      # 依赖完成后立即缓存；后续项目编译或测试失败也不会丢失依赖编译成果。
+      - name: Save complete dependency cache
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
 
       - name: Build
         run: cmake --build build --parallel 2
@@ -105,3 +118,11 @@ jobs:
             build/vcpkg-manifest-install.log
             .vcpkg/buildtrees/**/*.log
           if-no-files-found: ignore
+
+      # 缓存不可覆盖。失败时使用独立 key，下一轮可按前缀恢复并继续补齐依赖。
+      - name: Save partial dependencies after configure failure
+        if: failure() && steps.configure.outcome == 'failure'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}-partial-${{ github.run_id }}-${{ github.run_attempt }}

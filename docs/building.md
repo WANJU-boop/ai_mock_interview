@@ -32,7 +32,7 @@ sudo apt-get install -y cmake ninja-build g++ git curl zip unzip tar \
   pkg-config autoconf autoconf-archive automake libtool bison flex gperf \
   python3 python3-jinja2 libltdl-dev libasound2-dev libjack-jackd2-dev \
   '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev \
-  libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev
+  libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev libsm-dev
 ```
 
 Qt needs the X11/XCB/OpenGL development packages even though automated UI tests
@@ -134,7 +134,8 @@ but not to run this Mock interview.
 - **Double-clicking the macOS app cannot locate configuration.** Launch using the
   explicit command above or select `config.example.json` in the window.
 - **Build is slow.** vcpkg compiles large native dependencies, sometimes for both
-  Debug and Release. CI caches compiled dependencies after a successful run.
+  Debug and Release. CI saves the dependency cache immediately after configuration;
+  if dependency installation fails, it keeps a separate partial cache for the next run.
 
 ## Optional real services
 
@@ -152,5 +153,6 @@ and may incur provider charges. Keep TLS certificate verification enabled.
 Unit tests and CI never use `config.local.json`, real credentials, microphones,
 or paid services. Service availability is separate from Mock and CI results.
 
-References: [Microsoft's vcpkg setup guide](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started)
-and the pinned vcpkg Qt platform prerequisites.
+References: [Microsoft's vcpkg setup guide](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started),
+the pinned vcpkg Qt platform prerequisites, and
+[Ubuntu's X11 session-management headers](https://packages.ubuntu.com/noble/libsm-dev).
