@@ -227,12 +227,13 @@ void MainWindow::ShowReport() {
             status_label_->setText(QStringLiteral("无法查看报告：题目或评分字段无效。"));
             return;
         }
-        text += QStringLiteral("%1. %2\n回答：%3\n得分：%4 / 100\n反馈：%5\n")
-                    .arg(index + 1)
-                    .arg(record.value(QStringLiteral("question")).toString(),
-                         record.value(QStringLiteral("candidate_answer")).toString())
-                    .arg(points)
-                    .arg(score.value(QStringLiteral("feedback")).toString());
+        // 一次替换模板的全部参数，防止后续 arg() 把回答中的 %1 等代码示例当成新占位符。
+        text +=
+            QStringLiteral("%1. %2\n回答：%3\n得分：%4 / 100\n反馈：%5\n")
+                .arg(QString::number(index + 1),
+                     record.value(QStringLiteral("question")).toString(),
+                     record.value(QStringLiteral("candidate_answer")).toString(),
+                     QString::number(points), score.value(QStringLiteral("feedback")).toString());
         if (record.value(QStringLiteral("has_follow_up")).toBool()) {
             text += QStringLiteral("追问：%1\n补充回答：%2\n")
                         .arg(record.value(QStringLiteral("follow_up_prompt")).toString(),

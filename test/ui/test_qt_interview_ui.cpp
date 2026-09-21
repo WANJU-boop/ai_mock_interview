@@ -3,6 +3,7 @@
 
 #include <QByteArray>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
@@ -71,6 +72,7 @@ class QtInterviewUiTest final : public QObject {
     void RunsMockInterviewInWorkerThread();
     void HonorsCancellationBeforeWorkerStarts();
     void CompletesMockAndDisplaysSavedReport();
+    void PreservesPlaceholderTextInReport();
     void RejectsInvalidReport();
 };
 
@@ -165,6 +167,44 @@ void QtInterviewUiTest::CompletesMockAndDisplaysSavedReport() {
     QVERIFY(preview->toPlainText().contains(QStringLiteral("已完成 1 道题")));
     QVERIFY(preview->toPlainText().contains(QStringLiteral(" / 100")));
     QVERIFY(preview->toPlainText().contains(QStringLiteral("反馈：")));
+}
+
+// 验证候选人的 Qt 代码示例不会被二次格式化；%1 等占位符是回答正文，必须原样保留。
+void QtInterviewUiTest::PreservesPlaceholderTextInReport() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("placeholders.json"));
+    const QString question = QStringLiteral("如何替换 %1？");
+    const QString answer = QStringLiteral("用 QStringLiteral(\"%1\").arg(value)，保留 %2 示例。");
+    const QString feedback = QStringLiteral("能解释 %3 占位符。");
+    // 构造最小本地报告来隔离显示层，不依赖真实 LLM 的随机回答或网络连接。
+    const QJsonObject record{
+        {QStringLiteral("question"), question},
+        {QStringLiteral("candidate_answer"), answer},
+        {QStringLiteral("final_score"),
+         QJsonObject{{QStringLiteral("score"), 88}, {QStringLiteral("feedback"), feedback}}}};
+    const QByteArray bytes =
+        QJsonDocument(QJsonObject{{QStringLiteral("question_count"), 1},
+                                  {QStringLiteral("question_answer_records"), QJsonArray{record}}})
+            .toJson();
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(bytes), bytes.size());
+    file.close();
+    interview::ui::MainWindow window(QStringLiteral("unused.json"));
+    QVERIFY(QMetaObject::invokeMethod(&window, "HandleFinished", Q_ARG(bool, true),
+                                      Q_ARG(QString, QStringLiteral("面试完成。")),
+                                      Q_ARG(QString, path)));
+    auto* view = window.findChild<QPushButton*>(QStringLiteral("viewReportButton"));
+    QVERIFY(view != nullptr);
+    view->click();
+    auto* preview = window.findChild<QPlainTextEdit*>(QStringLiteral("reportPreview"));
+    QVERIFY(preview != nullptr);
+    const QString text = preview->toPlainText();
+    QVERIFY(text.contains(question));
+    QVERIFY(text.contains(answer));
+    QVERIFY(text.contains(feedback));
+    QVERIFY(text.contains(QStringLiteral("得分：88 / 100")));
 }
 
 // 验证磁盘文件损坏时只显示可理解的错误；不把无效 JSON 误显示为正常面试结果。
