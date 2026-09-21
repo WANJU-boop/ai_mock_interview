@@ -23,6 +23,8 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
 - 改动前 macOS Debug 构建成功，202 项 CTest 全部通过。
 - CI 运行记录会在功能分支推送后核实，不能把 workflow 文件存在视为 CI 成功。
 - 文档命令与 CI 使用相同的依赖 baseline 和默认 Mock 配置。
+- 第一次云端运行在 spdlog 版本解析阶段失败：vcpkg 的浅克隆不包含 override 引用的
+  历史 port tree。已改为完整获取 vcpkg 历史，保留原有版本约束。
 
 ## 下一步
 

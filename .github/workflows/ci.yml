@@ -48,6 +48,8 @@ jobs:
           repository: microsoft/vcpkg
           ref: ${{ steps.baseline.outputs.sha }}
           path: .vcpkg
+          # overrides 可能引用历史版本的 port tree，浅克隆无法解析这些对象。
+          fetch-depth: 0
 
       # 缓存只加速依赖编译；每次仍从源码重新构建项目并运行测试。
       - name: Restore compiled dependencies
