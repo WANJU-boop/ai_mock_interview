@@ -35,6 +35,10 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
   小写的 `find_package(openssl CONFIG REQUIRED)` 在 Linux 上找不到实际的
   `OpenSSLConfig.cmake`。改用标准的 `find_package(OpenSSL REQUIRED COMPONENTS SSL Crypto)`，
   通过 CMake 的 FindOpenSSL 模块提供原有的两个链接目标，保持依赖版本不变。
+- 第四次云端运行复用全部依赖后进入最终链接，火山文本 demo 出现
+  `Logger::GetLogger()` 未定义引用。`services_lib` 的实现调用了 `common_lib`，
+  但原 CMake 没有声明这条依赖；现显式关联，由 CMake 排列静态库的链接顺序，
+  不依赖 macOS 链接器的宽容行为或在各个可执行程序中手动调整顺序。
 
 ## 下一步
 

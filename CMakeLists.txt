@@ -76,6 +76,8 @@ target_include_directories(services_lib
 
 target_link_libraries(services_lib
     PRIVATE
+        # 服务实现调用公共日志；显式声明依赖，让 Linux 静态链接按正确顺序解析符号。
+        common_lib
         nlohmann_json::nlohmann_json
         OpenSSL::Crypto
         OpenSSL::SSL
