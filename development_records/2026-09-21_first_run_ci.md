@@ -31,6 +31,10 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
   避免不可覆盖的部分缓存占用完整缓存 key，也避免每次重新编译之前成功的库。
 - 公开仓库的 Ubuntu runner 提供 4 核、16 GB 内存，依赖并发从 2 调整到 4；
   本地文档仍建议初学者以 2 个项目编译任务起步。
+- 第三次云端运行成功编译全部 112 个依赖并保存缓存，随后在项目配置阶段失败：
+  小写的 `find_package(openssl CONFIG REQUIRED)` 在 Linux 上找不到实际的
+  `OpenSSLConfig.cmake`。改用标准的 `find_package(OpenSSL REQUIRED COMPONENTS SSL Crypto)`，
+  通过 CMake 的 FindOpenSSL 模块提供原有的两个链接目标，保持依赖版本不变。
 
 ## 下一步
 

@@ -15,7 +15,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # 依赖
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(openssl CONFIG REQUIRED)
+# 使用 CMake 的标准包名与查找模块，避免大小写敏感的 Linux 找不到 OpenSSL。
+find_package(OpenSSL REQUIRED COMPONENTS SSL Crypto)
 find_package(boost_asio CONFIG REQUIRED)
 find_package(boost_beast CONFIG REQUIRED)
 find_package(boost_system CONFIG REQUIRED)
