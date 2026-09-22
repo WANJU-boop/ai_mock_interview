@@ -21,7 +21,10 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
 ## 验证结果
 
 - 改动前 macOS Debug 构建成功，202 项 CTest 全部通过。
-- CI 运行记录会在功能分支推送后核实，不能把 workflow 文件存在视为 CI 成功。
+- 最终 Ubuntu 24.04 [CI 运行成功](https://github.com/WANJU-boop/ai_mock_interview/actions/runs/35673504548)：
+  提交 `64e1c14`，全部程序编译成功，203/203 CTest 通过（1.11 秒），
+  默认 Mock 入口生成一份含三条评分记录的报告，整轮耗时 2 分 14 秒。
+- 同版 macOS 构建成功，203/203 CTest 通过（12.92 秒），Qt 测试已能在无图形会话的沙箱运行。
 - 文档命令与 CI 使用相同的依赖 baseline 和默认 Mock 配置。
 - 第一次云端运行在 spdlog 版本解析阶段失败：vcpkg 的浅克隆不包含 override 引用的
   历史 port tree。已改为完整获取 vcpkg 历史，保留原有版本约束。
@@ -46,9 +49,15 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
 
 ## 下一步
 
-核实修复 Linux 平台依赖后的云端构建结果。Qt 报告展示、真实截图和文本接口验证
-已完成，详见同日的项目展示记录；真实服务可用性不影响无密钥演示。
+首次运行与跨平台 CI 已形成闭环。Qt 报告展示、真实截图和文本接口验证
+也已完成，详见同日的项目展示记录。后续优先考虑 Qt 无密钥文字回答模式，
+让读者能在桌面界面亲自回答；真实服务可用性不影响现有无密钥演示。
+
+本次成功运行从功能分支缓存恢复全部 112 个依赖，仅耗时 18 秒。
+PR 的独立检查实际未命中该缓存，因此不能保证不同分支或首次合并后的运行同样快。
 
 参考：[Ubuntu libsm-dev](https://packages.ubuntu.com/noble/libsm-dev)、
 [GitHub 独立缓存保存](https://github.com/actions/cache/tree/v4/save)、
-[GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
+[GitHub runner 规格](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、
+[CMake FindOpenSSL](https://cmake.org/cmake/help/latest/module/FindOpenSSL.html)、
+[Qt 静态插件导入](https://doc.qt.io/qt-6/qt-import-plugins.html)。
