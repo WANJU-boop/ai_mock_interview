@@ -56,10 +56,7 @@ target_link_libraries(Qt_ui_test
 )
 
 add_test(NAME QtUiTest COMMAND Qt_ui_test)
-# vcpkg 的 macOS qtbase 只安装 cocoa plugin；报告预览测试会短暂打开窗口，需要图形会话。
-# Linux/其它平台使用适合无显示器 CI 的 offscreen plugin，不依赖真实显示器。
-if(APPLE)
-    set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
-else()
-    set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
-endif()
+# 静态 Qt 默认只导入系统平台插件；仅设置环境变量不能把 offscreen 链接进测试程序。
+# 测试显式选择无显示器插件，仍运行真实控件与 worker；桌面应用继续使用系统默认插件。
+qt_import_plugins(Qt_ui_test INCLUDE_BY_TYPE platforms Qt6::QOffscreenIntegrationPlugin)
+set_tests_properties(QtUiTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

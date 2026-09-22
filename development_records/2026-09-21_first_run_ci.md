@@ -39,6 +39,10 @@ CMake manifest 安装 → 编译 → CTest → 默认 realtime Mock demo → 验
   `Logger::GetLogger()` 未定义引用。`services_lib` 的实现调用了 `common_lib`，
   但原 CMake 没有声明这条依赖；现显式关联，由 CMake 排列静态库的链接顺序，
   不依赖 macOS 链接器的宽容行为或在各个可执行程序中手动调整顺序。
+- 第五次运行完成全部程序的编译与链接，202 项普通测试通过，Qt 测试报找不到
+  `offscreen`。插件已在依赖中构建，但静态 Qt 默认只导入系统平台插件。
+  测试目标改用 `qt_import_plugins` 显式导入 offscreen，所有平台统一无显示器测试，
+  桌面应用的平台插件不变。
 
 ## 下一步
 
