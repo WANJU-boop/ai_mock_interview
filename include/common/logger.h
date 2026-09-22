@@ -12,7 +12,7 @@ namespace common {
 
 class Logger {
   public:
-    // 初始化进程级日志，同时准备控制台输出和文件输出。
+    // 初始化进程级日志；文件不可写时仍保留控制台输出，避免 GUI 首次运行因日志失败而崩溃。
     static void Init(const std::string& log_file = "interview.log", bool debug_mode = false);
 
     // 如果调用方忘记显式初始化日志，这里会用默认配置懒加载一个 logger。

@@ -5,26 +5,124 @@ on:
   push:
     branches:
       - main
+      - 'codex/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   cmake:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      # 公开仓库的标准 Ubuntu runner 提供 4 核、16 GB 内存。
+      VCPKG_MAX_CONCURRENCY: '4'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install base tools
+      # Qt 的 Linux 窗口系统和 PortAudio 仍需要系统开发包；vcpkg 不负责安装它们。
+      - name: Install build and platform prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++
+          sudo apt-get install -y cmake ninja-build g++ git curl zip unzip tar \
+            pkg-config autoconf autoconf-archive automake libtool bison flex gperf \
+            python3 python3-jinja2 libltdl-dev libasound2-dev libjack-jackd2-dev \
+            '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev libsm-dev
+
+      - name: Read pinned dependency baseline
+        id: baseline
+        run: echo "sha=$(python3 -c 'import json; print(json.load(open("vcpkg.json"))["builtin-baseline"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout vcpkg at the project baseline
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ steps.baseline.outputs.sha }}
+          path: .vcpkg
+          # overrides 可能引用历史版本的 port tree，浅克隆无法解析这些对象。
+          fetch-depth: 0
+
+      # 缓存只加速依赖编译；每次仍从源码重新构建项目并运行测试。
+      - name: Restore compiled dependencies
+        id: dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-cache
+          key: ubuntu-24.04-x64-vcpkg-${{ hashFiles('vcpkg.json', '.github/workflows/ci.yml') }}
+          restore-keys: |
+            ubuntu-24.04-x64-vcpkg-${{ hashFiles('vcpkg.json', '.github/workflows/ci.yml') }}-
+            ubuntu-24.04-x64-vcpkg-
+
+      - name: Bootstrap vcpkg
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+        id: configure
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+
+      # 依赖完成后立即缓存；后续项目编译或测试失败也不会丢失依赖编译成果。
+      - name: Save complete dependency cache
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --parallel 2
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      # 从实际入口跑完默认演示，验证“配置 -> 出题 -> 回答 -> 评分 -> 文件”整条数据流。
+      - name: Run key-free mock interview and validate its report
+        run: |
+          ./build/AI_mock_interview_realtime_demo config.example.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          reports = list(Path('reports').glob('interview-report-*.json'))
+          assert len(reports) == 1, 'Expected one report from the default mock demo'
+          report = json.loads(reports[0].read_text())
+          assert report['question_count'] == 3
+          assert len(report['question_answer_records']) == 3
+          assert all(record['candidate_answer'] for record in report['question_answer_records'])
+          assert all(0 <= record['final_score']['score'] <= 100
+                     for record in report['question_answer_records'])
+          print('Default mock interview produced three scored answers without API keys.')
+          PY
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-diagnostics
+          path: |
+            build/Testing/Temporary/LastTest.log
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/vcpkg-manifest-install.log
+            .vcpkg/buildtrees/**/*.log
+          if-no-files-found: ignore
+
+      # 缓存不可覆盖。失败时使用独立 key，下一轮可按前缀恢复并继续补齐依赖。
+      - name: Save partial dependencies after configure failure
+        if: failure() && steps.configure.outcome == 'failure'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-cache
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}-partial-${{ github.run_id }}-${{ github.run_attempt }}

@@ -1,14 +1,23 @@
+// clang-format off
 #include "ui/main_window.h"
 
-#include "ui/interview_worker.h"
+#include <memory>
+#include <utility>
 
+#include <QByteArray>
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QDialog>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
@@ -18,8 +27,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <memory>
-#include <utility>
+
+#include "ui/interview_worker.h"
+// clang-format on
 
 namespace interview {
 namespace ui {
@@ -69,6 +79,7 @@ void MainWindow::StartInterview() {
     report_path_.clear();
     report_path_edit_->clear();
     open_report_button_->setEnabled(false);
+    view_report_button_->setEnabled(false);
     SetRunning(true);
     status_label_->setText(QStringLiteral("正在启动 worker…"));
 
@@ -113,6 +124,11 @@ void MainWindow::HandleSessionPrepared(const QString& candidate_name, const QStr
                                         .arg(candidate_name, target_role)
                                         .arg(question_count)
                                         .arg(provider_name));
+    if (provider_name == QStringLiteral("mock")) {
+        // 明确区分预设回答与真实语音，避免演示界面让用户误以为麦克风或在线 AI 已启用。
+        session_summary_label_->setText(session_summary_label_->text() +
+                                        QStringLiteral("（自动预设回答，无需麦克风）"));
+    }
 }
 
 void MainWindow::HandleStateChanged(const QString& state_text) {
@@ -147,6 +163,7 @@ void MainWindow::HandleFinished(bool success, const QString& message, const QStr
     report_path_ = report_path;
     report_path_edit_->setText(report_path_);
     open_report_button_->setEnabled(!report_path_.isEmpty());
+    view_report_button_->setEnabled(success && !report_path_.isEmpty());
     stop_button_->setEnabled(false);
 }
 
@@ -170,6 +187,73 @@ void MainWindow::OpenReportDirectory() {
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(directory))) {
         status_label_->setText(QStringLiteral("无法打开报告目录：%1").arg(directory));
     }
+}
+
+void MainWindow::ShowReport() {
+    if (report_path_.isEmpty()) {
+        return;
+    }
+
+    // 报告已由 worker 原子写入。这里只做有大小上限的本地读取，不联网、不重新评分，
+    // 也不将候选人正文写入日志；限制大小可避免误选超大文件时长时间阻塞 UI。
+    QFile report_file(report_path_);
+    constexpr qint64 kMaximumReportBytes = 4 * 1024 * 1024;
+    if (!report_file.open(QIODevice::ReadOnly) || report_file.size() > kMaximumReportBytes) {
+        status_label_->setText(QStringLiteral("无法查看报告：文件不可读或超过 4 MiB。"));
+        return;
+    }
+    const QByteArray bytes = report_file.read(kMaximumReportBytes + 1);
+    QJsonParseError parse_error;
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &parse_error);
+    const QJsonObject report = document.object();
+    const QJsonArray records = report.value(QStringLiteral("question_answer_records")).toArray();
+    if (bytes.size() > kMaximumReportBytes || parse_error.error != QJsonParseError::NoError ||
+        !document.isObject() || records.isEmpty() ||
+        report.value(QStringLiteral("question_count")).toDouble(-1) != records.size()) {
+        // 损坏或不匹配的报告不能显示为“0 分成功”，保留原文件让用户检查。
+        status_label_->setText(QStringLiteral("无法查看报告：JSON 或问答记录格式无效。"));
+        return;
+    }
+
+    QString text =
+        QStringLiteral("面试结果 / Interview results\n已完成 %1 道题\n\n").arg(records.size());
+    for (int index = 0; index < records.size(); ++index) {
+        const QJsonObject record = records.at(index).toObject();
+        const QJsonObject score = record.value(QStringLiteral("final_score")).toObject();
+        const double points = score.value(QStringLiteral("score")).toDouble(-1);
+        if (!record.value(QStringLiteral("question")).isString() ||
+            !record.value(QStringLiteral("candidate_answer")).isString() ||
+            !score.value(QStringLiteral("feedback")).isString() || points < 0 || points > 100) {
+            status_label_->setText(QStringLiteral("无法查看报告：题目或评分字段无效。"));
+            return;
+        }
+        // 一次替换模板的全部参数，防止后续 arg() 把回答中的 %1 等代码示例当成新占位符。
+        text +=
+            QStringLiteral("%1. %2\n回答：%3\n得分：%4 / 100\n反馈：%5\n")
+                .arg(QString::number(index + 1),
+                     record.value(QStringLiteral("question")).toString(),
+                     record.value(QStringLiteral("candidate_answer")).toString(),
+                     QString::number(points), score.value(QStringLiteral("feedback")).toString());
+        if (record.value(QStringLiteral("has_follow_up")).toBool()) {
+            text += QStringLiteral("追问：%1\n补充回答：%2\n")
+                        .arg(record.value(QStringLiteral("follow_up_prompt")).toString(),
+                             record.value(QStringLiteral("follow_up_answer")).toString());
+        }
+        text += QLatin1Char('\n');
+    }
+
+    // 对话框由主窗口拥有，关闭后自动释放。纯文本控件不会执行回答里的 HTML 或打开链接。
+    auto* dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(QStringLiteral("面试结果 / Interview results"));
+    dialog->resize(840, 600);
+    auto* layout = new QVBoxLayout(dialog);
+    auto* preview = new QPlainTextEdit(dialog);
+    preview->setObjectName(QStringLiteral("reportPreview"));
+    preview->setReadOnly(true);
+    preview->setPlainText(text);
+    layout->addWidget(preview);
+    dialog->show();
 }
 
 void MainWindow::BuildUi() {
@@ -228,9 +312,13 @@ void MainWindow::BuildUi() {
     report_path_edit_ = new QLineEdit(report_group);
     report_path_edit_->setReadOnly(true);
     report_path_edit_->setPlaceholderText(QStringLiteral("完成后显示本地 JSON 报告路径"));
+    view_report_button_ = new QPushButton(QStringLiteral("查看报告"), report_group);
+    view_report_button_->setObjectName(QStringLiteral("viewReportButton"));
+    view_report_button_->setEnabled(false);
     open_report_button_ = new QPushButton(QStringLiteral("打开目录"), report_group);
     open_report_button_->setEnabled(false);
     report_layout->addWidget(report_path_edit_, 1);
+    report_layout->addWidget(view_report_button_);
     report_layout->addWidget(open_report_button_);
     root_layout->addWidget(report_group);
 
@@ -252,6 +340,7 @@ void MainWindow::BuildUi() {
     connect(start_button_, &QPushButton::clicked, this, &MainWindow::StartInterview);
     connect(stop_button_, &QPushButton::clicked, this, &MainWindow::StopInterview);
     connect(open_report_button_, &QPushButton::clicked, this, &MainWindow::OpenReportDirectory);
+    connect(view_report_button_, &QPushButton::clicked, this, &MainWindow::ShowReport);
 }
 
 void MainWindow::SetRunning(bool running) {

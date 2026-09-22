@@ -16,35 +16,35 @@ namespace common {
 std::shared_ptr<spdlog::logger> Logger::logger_ = nullptr;
 
 void Logger::Init(const std::string& log_file, bool debug_mode) {
+    // 先准备不依赖文件权限的控制台输出；磁盘日志失败不能让业务代码解引用空 logger。
+    std::vector<spdlog::sink_ptr> sinks;
+
+    // 控制台日志面向当前调试过程，debug 模式下显示更详细信息。
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    console_sink->set_level(debug_mode ? spdlog::level::debug : spdlog::level::info);
+    console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+    sinks.push_back(console_sink);
+
     try {
-        // 控制台和文件两个输出目标统一挂到同一个 logger，业务层只依赖这一处入口。
-        std::vector<spdlog::sink_ptr> sinks;
-
-        // 控制台日志面向当前调试过程，debug 模式下显示更详细信息。
-        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        console_sink->set_level(debug_mode ? spdlog::level::debug : spdlog::level::info);
-        console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
-        sinks.push_back(console_sink);
-
         // 文件日志保留 trace 级别信息，方便之后复盘问题。
         auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(log_file, true);
         file_sink->set_level(spdlog::level::trace);
         file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] [%s:%#] %v");
         sinks.push_back(file_sink);
-
-        // 多个 sink 组合成一个 logger，避免不同模块各自创建日志实例。
-        logger_ = std::make_shared<spdlog::logger>("interview", sinks.begin(), sinks.end());
-        logger_->set_level(debug_mode ? spdlog::level::debug : spdlog::level::info);
-        logger_->flush_on(spdlog::level::warn);
-
-        // 设置为 spdlog 默认 logger，后续扩展第三方封装时也能复用同一份配置。
-        spdlog::set_default_logger(logger_);
-
-        LOG_INFO("日志系统已初始化，debug 模式：{}", debug_mode);
-    } catch (const spdlog::spdlog_ex& ex) {
-        // 日志初始化失败时，至少把错误打到标准错误，避免静默失败。
-        std::cerr << "日志初始化失败：" << ex.what() << std::endl;
+    } catch (const spdlog::spdlog_ex&) {
+        // 桌面启动时工作目录可能不可写。保留控制台 sink，不回显路径或中断面试。
+        std::cerr << "日志文件不可写，继续使用控制台日志。" << std::endl;
     }
+
+    // 无论文件 sink 是否建立成功，对外始终提供可用的 logger。
+    logger_ = std::make_shared<spdlog::logger>("interview", sinks.begin(), sinks.end());
+    logger_->set_level(debug_mode ? spdlog::level::debug : spdlog::level::info);
+    logger_->flush_on(spdlog::level::warn);
+
+    // 设置为 spdlog 默认 logger，后续扩展第三方封装时也能复用同一份配置。
+    spdlog::set_default_logger(logger_);
+
+    LOG_INFO("日志系统已初始化，debug 模式：{}", debug_mode);
 }
 
 std::shared_ptr<spdlog::logger>& Logger::GetLogger() {

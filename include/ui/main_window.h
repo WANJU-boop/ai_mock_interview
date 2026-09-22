@@ -1,11 +1,14 @@
 #pragma once
 
-#include "session/dialog_cancellation.h"
+// clang-format off
+#include <memory>
 
 #include <QMainWindow>
 #include <QPointer>
 #include <QString>
-#include <memory>
+
+#include "session/dialog_cancellation.h"
+// clang-format on
 
 class QCloseEvent;
 class QLabel;
@@ -23,6 +26,7 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 
   public:
+    // 传入默认配置路径；窗口只在用户点击开始后创建后台面试任务。
     explicit MainWindow(QString default_config_path, QWidget* parent = nullptr);
 
   protected:
@@ -41,6 +45,8 @@ class MainWindow final : public QMainWindow {
     void HandleFinished(bool success, const QString& message, const QString& report_path);
     void HandleWorkerThreadFinished();
     void OpenReportDirectory();
+    // 仅在面试报告保存成功后读取本地结果，用纯文本展示，避免解释回答中的 HTML。
+    void ShowReport();
 
   private:
     void BuildUi();
@@ -55,6 +61,7 @@ class MainWindow final : public QMainWindow {
     QLabel* partial_transcript_label_ = nullptr;
     QLineEdit* report_path_edit_ = nullptr;
     QPushButton* open_report_button_ = nullptr;
+    QPushButton* view_report_button_ = nullptr;
     QPushButton* start_button_ = nullptr;
     QPushButton* stop_button_ = nullptr;
 
